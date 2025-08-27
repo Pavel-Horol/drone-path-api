@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongo:27017/drone_routes
+      - MINIO_ENDPOINT=minio
+      - MINIO_SERVER_URL=http://localhost:9000
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_BUCKET=drone-photos
+    depends_on:
+      - mongo
+      - minio
+    volumes:
+      - ./src:/app/src
+      - ./routes:/app/routes
+      - ./services:/app/services
+    command: npm run dev
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=drone_routes
+
+  mongo-express:
+    image: mongo-express
+    ports:
+      - '8081:8081'
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin
+      - ME_CONFIG_MONGODB_PORT=27017
+    depends_on:
+      - mongo
+
+  mongo-exporter:
+    image: bitnami/mongodb-exporter:latest
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+    ports:
+      - "9216:9216"
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+  minio-mc:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb local/drone-photos || true &&
+        mc anonymous set download local/drone-photos
+      "
+
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+     - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    restart: unless-stopped
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    depends_on:
+      - app
+      - cadvisor
+    restart: unless-stopped
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+
+volumes:
+  mongo_data:
+  minio_data:
+  grafana_data:
