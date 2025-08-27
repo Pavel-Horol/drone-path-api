@@ -30,20 +30,10 @@ router.post('/', upload.fields([
     const csvFile = req.files.csv[0];
     const photoFiles = req.files.photos || [];
     const routeName = req.body.name || `Route_${Date.now()}`;
-    const droneId = req.body.droneId;
-
-    // Validate drone exists if droneId is provided
-    if (droneId) {
-      const drone = await Drone.findById(droneId);
-      if (!drone) {
-        return res.status(400).json({ error: 'Invalid droneId: drone not found' });
-      }
-    }
 
     console.log(`Processing route: ${routeName}`);
     console.log(`CSV file: ${csvFile.originalname} (${csvFile.size} bytes)`);
     console.log(`Photos: ${photoFiles.length} files`);
-    if (droneId) console.log(`Drone: ${droneId}`);
 
     let points;
     try {
@@ -58,7 +48,6 @@ router.post('/', upload.fields([
 
     const route = new Route({
       name: routeName,
-      droneId: droneId || undefined,
       points: points
     });
 
@@ -187,7 +176,7 @@ router.post('/:id/photos', upload.array('photos', 1000), async (req, res) => {
 // GET /routes/:id - Get route data for mapping
 router.get('/:id', async (req, res) => {
   try {
-    const route = await Route.findById(req.params.id).populate('droneId');
+    const route = await Route.findById(req.params.id);
     if (!route) {
       return res.status(404).json({ error: 'Route not found' });
     }
@@ -235,12 +224,6 @@ router.get('/:id', async (req, res) => {
       status: route.status,
       totalPoints: route.totalPoints,
       pointsWithPhotos: route.pointsWithPhotos,
-      drone: route.droneId ? {
-        id: route.droneId._id,
-        model: route.droneId.model,
-        serialNumber: route.droneId.serialNumber,
-        manufacturer: route.droneId.manufacturer
-      } : null,
       createdAt: route.createdAt,
       updatedAt: route.updatedAt,
       points: pointsWithUrls
@@ -257,31 +240,14 @@ router.get('/', async (req, res) => {
   try {
     const routes = await Route.find({}, {
       name: 1,
-      droneId: 1,
       status: 1,
       totalPoints: 1,
       pointsWithPhotos: 1,
       createdAt: 1,
       updatedAt: 1
-    }).populate('droneId', 'model serialNumber manufacturer').sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 });
 
-    const routesWithDroneInfo = routes.map(route => ({
-      id: route._id,
-      name: route.name,
-      status: route.status,
-      totalPoints: route.totalPoints,
-      pointsWithPhotos: route.pointsWithPhotos,
-      drone: route.droneId ? {
-        id: route.droneId._id,
-        model: route.droneId.model,
-        serialNumber: route.droneId.serialNumber,
-        manufacturer: route.droneId.manufacturer
-      } : null,
-      createdAt: route.createdAt,
-      updatedAt: route.updatedAt
-    }));
-
-    res.json(routesWithDroneInfo);
+    res.json(routes);
   } catch (error) {
     console.error('Routes listing error:', error);
     res.status(500).json({ error: 'Internal server error' });

@@ -28,11 +28,6 @@ const pointSchema = new Schema({
 
 const routeSchema = new Schema({
   name: { type: String, required: true },
-  droneId: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'Drone',
-    required: false 
-  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
   totalPoints: { type: Number, default: 0 },
@@ -45,17 +40,6 @@ const routeSchema = new Schema({
   }
 });
 
-// Virtual populate for drone data
-routeSchema.virtual('drone', {
-  ref: 'Drone',
-  localField: 'droneId',
-  foreignField: '_id',
-  justOne: true
-});
-
-// Ensure virtual fields are included in JSON output
-routeSchema.set('toJSON', { virtuals: true });
-routeSchema.set('toObject', { virtuals: true });
 
 // Update timestamps on save
 routeSchema.pre('save', function(next) {
