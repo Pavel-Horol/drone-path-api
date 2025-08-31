@@ -1,14 +1,15 @@
+import { config } from '../config/index.js';
 import { Client } from 'minio';
 
 const minioClient = new Client({
-  endPoint: process.env.MINIO_ENDPOINT || 'localhost',
-  port: parseInt(process.env.MINIO_PORT) || 9000,
+  endPoint: config.minio.endpoint,
+  port: config.minio.port,
   useSSL: false,
-  accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-  secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin'
+  accessKey: config.minio.accessKey || 'minioadmin',
+  secretKey: config.minio.secretKey || 'minioadmin'
 });
 
-export const BUCKET_NAME = process.env.MINIO_BUCKET || 'drone-photos';
+export const BUCKET_NAME = config.minio.bucket;
 
 export async function initializeMinio() {
   try {
