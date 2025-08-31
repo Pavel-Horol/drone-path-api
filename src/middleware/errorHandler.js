@@ -61,6 +61,16 @@ const handleMulterError = (err) => {
   return new AppError('File upload error', 400);
 };
 
+// Handle VineJS validation errors
+const handleVineJSError = (err) => {
+  if (err.messages) {
+    const errors = err.messages.map(msg => msg.message).join('. ');
+    return new AppError(`Validation failed: ${errors}`, 400);
+  }
+
+  return new AppError('Validation error', 400);
+};
+
 // Send error response based on environment
 const sendErrorResponse = (err, req, res) => {
   const isDevelopment = process.env.NODE_ENV === 'development';
@@ -116,6 +126,8 @@ export function errorHandler(err, req, res, _next) {
     error = handleJWTError(err);
   } else if (err.name === 'MulterError') {
     error = handleMulterError(err);
+  } else if (err.constructor && err.constructor.name === 'ValidationError') {
+    error = handleVineJSError(err);
   }
 
   // Default error properties

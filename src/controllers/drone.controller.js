@@ -6,8 +6,6 @@ import { createError } from '../utils/appError.js';
 export async function createDrone(req, res) {
   const { model, serialNumber, currentBatteryCharge, totalFlightTime } = req.body;
 
-  if (!model || !serialNumber) throw createError.badRequest('model and serialNumber are required');
-
 
   const drone = await Drone.create({
     model,
