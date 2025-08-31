@@ -1,12 +1,6 @@
 import { Schema, model } from 'mongoose';
 
 const droneSchema = new Schema({
-  droneId: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
-  },
   model: {
     type: String,
     required: true,
@@ -47,7 +41,7 @@ droneSchema.pre('save', function(next) {
 
 droneSchema.virtual('routes', {
   ref: 'Route',
-  localField: 'droneId',
+  localField: '_id',
   foreignField: 'droneId'
 });
 
@@ -55,7 +49,6 @@ droneSchema.set('toObject', { virtuals: true });
 droneSchema.set('toJSON', { virtuals: true });
 
 // Index for faster queries
-droneSchema.index({ droneId: 1 });
 droneSchema.index({ serialNumber: 1 });
 
 export default model('Drone', droneSchema);

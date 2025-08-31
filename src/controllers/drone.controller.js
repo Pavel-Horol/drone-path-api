@@ -4,14 +4,13 @@ import { createError } from '../utils/appError.js';
 
 // Create new drone - ZERO WRAPPERS: Just throw errors, they're caught automatically!
 export async function createDrone(req, res) {
-  const { droneId, model, serialNumber, currentBatteryCharge, totalFlightTime } = req.body;
+  const { model, serialNumber, currentBatteryCharge, totalFlightTime } = req.body;
 
-  if (!droneId || !model || !serialNumber) {
-    throw createError.badRequest('droneId, model, and serialNumber are required');
+  if (!model || !serialNumber) {
+    throw createError.badRequest('model and serialNumber are required');
   }
 
   const drone = await Drone.create({
-    droneId,
     model,
     serialNumber,
     currentBatteryCharge: currentBatteryCharge || 100,
@@ -20,7 +19,6 @@ export async function createDrone(req, res) {
 
   res.status(201).json({
     id: drone._id,
-    droneId: drone.droneId,
     model: drone.model,
     serialNumber: drone.serialNumber,
     currentBatteryCharge: drone.currentBatteryCharge,
@@ -32,7 +30,6 @@ export async function createDrone(req, res) {
 // List all drones
 export async function getAllDrones(req, res) {
   const drones = await Drone.find({}, {
-    droneId: 1,
     model: 1,
     serialNumber: 1,
     currentBatteryCharge: 1,
@@ -46,15 +43,8 @@ export async function getAllDrones(req, res) {
 
 // Get specific drone details
 export async function getDroneById(req, res) {
-  const droneId = req.params.id;
-
   const drone = await Drone
-    .findOne({
-      $or: [
-        { _id:  droneId },
-        { droneId: droneId }
-      ]
-    })
+    .findById(req.params.id)
     .populate({
       path: 'routes',
       select: 'name status totalPoints pointsWithPhotos createdAt',
@@ -86,13 +76,8 @@ export async function updateDrone(req, res) {
     updateData.totalFlightTime = totalFlightTime;
   }
 
-  const drone = await Drone.findOneAndUpdate(
-    {
-      $or: [
-        { _id: req.params.id },
-        { droneId: req.params.id }
-      ]
-    },
+  const drone = await Drone.findByIdAndUpdate(
+    req.params.id,
     updateData,
     { new: true }
   );
@@ -103,7 +88,6 @@ export async function updateDrone(req, res) {
 
   return res.json({
     id: drone._id,
-    droneId: drone.droneId,
     model: drone.model,
     serialNumber: drone.serialNumber,
     currentBatteryCharge: drone.currentBatteryCharge,
@@ -115,18 +99,13 @@ export async function updateDrone(req, res) {
 // Delete drone
 export async function deleteDrone(req, res) {
   // Check if drone has associated routes
-  const drone = await Drone.findOne({
-    $or: [
-      { _id: req.params.id },
-      { droneId: req.params.id }
-    ]
-  });
+  const drone = await Drone.findById(req.params.id);
 
   if (!drone) {
     throw createError.notFound('Drone');
   }
 
-  const routeCount = await Route.countDocuments({ droneId: drone.droneId });
+  const routeCount = await Route.countDocuments({ droneId: drone._id });
 
   if (routeCount > 0) {
     throw createError.badRequest(`Cannot delete drone. It has ${routeCount} associated routes. Delete routes first.`);
@@ -138,7 +117,6 @@ export async function deleteDrone(req, res) {
     message: 'Drone deleted successfully',
     deletedDrone: {
       id: drone._id,
-      droneId: drone.droneId,
       model: drone.model,
       serialNumber: drone.serialNumber
     }
@@ -148,12 +126,7 @@ export async function deleteDrone(req, res) {
 // Assign drone to route
 export async function assignDroneToRoute(req, res) {
   // Check if drone exists
-  const drone = await Drone.findOne({
-    $or: [
-      { _id: req.params.droneId },
-      { droneId: req.params.droneId }
-    ]
-  });
+  const drone = await Drone.findById(req.params.droneId);
 
   if (!drone) {
     throw createError.notFound('Drone');
@@ -166,7 +139,7 @@ export async function assignDroneToRoute(req, res) {
   }
 
   // Update route with drone assignment
-  route.droneId = drone.droneId;
+  route.droneId = drone._id;
   await route.save();
 
   return res.json({
@@ -181,7 +154,6 @@ export async function assignDroneToRoute(req, res) {
     },
     drone: {
       id: drone._id,
-      droneId: drone.droneId,
       model: drone.model,
       serialNumber: drone.serialNumber
     }
