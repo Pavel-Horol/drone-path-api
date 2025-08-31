@@ -3,9 +3,12 @@ import cors from 'cors';
 import { metricsMiddleware } from './middleware/metrics.js';
 import router from './routes/index.js';
 import { register } from './config/monitoring.config.js';
-import { errorHandler } from './middleware/errorHandler.js';
+import { errorHandler, catchAsync } from './middleware/errorHandler.js';
 
 const app = express();
+
+// Enable automatic async error catching for all routes
+catchAsync(app);
 
 // Middleware
 app.use(cors());
@@ -24,10 +27,14 @@ app.use('/metrics', async(req, res) => {
   res.end(await register.metrics());
 });
 
-// Error & 404 handling middleware
-app.use(errorHandler);
-app.use('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+// 404 handling middleware (must come before error handler)
+app.use('*', (req, res, next) => {
+  const err = new Error(`Route ${req.originalUrl} not found`);
+  err.statusCode = 404;
+  next(err);
 });
+
+// Error handling middleware (must be last)
+app.use(errorHandler);
 
 export default app;

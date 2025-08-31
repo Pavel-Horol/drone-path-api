@@ -1,5 +1,4 @@
-import { ObjectId } from 'bson';
-import { Schema, model } from 'mongoose';
+import { Schema, model, ObjectId } from 'mongoose';
 
 const pointSchema = new Schema({
   fileName: { type: String, required: true },

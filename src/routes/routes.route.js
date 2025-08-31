@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import multer, { memoryStorage } from 'multer';
 import Route from '../models/route.model.js';
-import Drone from '../models/drone.model.js';
-import { parseCsvBuffer, getUniqueFileNames } from '../services/scv.service.js';
+import * as routeController from '@/controllers/route.controller.js';
 import { uploadPhoto, getPhotoUrl } from '../services/minio.service.js';
 
 const router = Router();
@@ -21,116 +20,7 @@ const upload = multer({
 router.post('/', upload.fields([
   { name: 'csv', maxCount: 1 },
   { name: 'photos', maxCount: 1000 }
-]), async(req, res) => {
-  try {
-    if (!req.files.csv || req.files.csv.length === 0) {
-      return res.status(400).json({ error: 'CSV file is required' });
-    }
-
-    if (!req.body.droneId) {
-      return res.status(400).json({ error: 'droneId is required' });
-    }
-
-    // Validate that drone exists
-    const drone = await Drone.findOne({
-      $or: [
-        { _id: req.body.droneId },
-        { droneId: req.body.droneId }
-      ]
-    });
-
-    if (!drone) {
-      return res.status(404).json({ error: 'Drone not found' });
-    }
-
-    const csvFile = req.files.csv[0];
-    const photoFiles = req.files.photos || [];
-    const routeName = req.body.name || `Route_${Date.now()}`;
-
-    console.log(`Processing route: ${routeName}`);
-    console.log(`CSV file: ${csvFile.originalname} (${csvFile.size} bytes)`);
-    console.log(`Photos: ${photoFiles.length} files`);
-
-    let points;
-    try {
-      points = await parseCsvBuffer(csvFile.buffer);
-    } catch (error) {
-      return res.status(400).json({ error: `CSV parsing failed: ${error.message}` });
-    }
-
-    if (points.length === 0) {
-      return res.status(400).json({ error: 'No valid data points found in CSV' });
-    }
-
-    const route = new Route({
-      name: routeName,
-      droneId: drone.droneId,
-      points: points
-    });
-
-    await route.save();
-    console.log(`Created route ${route._id} with ${points.length} points`);
-
-    const photoMap = new Map();
-    photoFiles.forEach(photo => {
-      photoMap.set(photo.originalname, photo);
-    });
-
-    let uploadedCount = 0;
-    const uploadPromises = [];
-
-    for (let i = 0; i < route.points.length; i++) {
-      const point = route.points[i];
-      const photo = photoMap.get(point.fileName);
-
-      if (photo) {
-        const uploadPromise = uploadPhoto(route._id.toString(), point.fileName, photo.buffer, photo.mimetype)
-          .then((objectKey) => {
-            route.points[i].photoUrl = objectKey;
-            route.points[i].hasPhoto = true;
-            uploadedCount++;
-          })
-          .catch((error) => {
-            console.error(`Failed to upload ${point.fileName}:`, error);
-          });
-
-        uploadPromises.push(uploadPromise);
-      }
-    }
-
-    await Promise.all(uploadPromises);
-
-    await route.save();
-
-    const requiredPhotos = getUniqueFileNames(points);
-    const missingPhotos = requiredPhotos.filter(fileName => !photoMap.has(fileName));
-
-    console.log(`Upload complete: ${uploadedCount}/${photoFiles.length} photos uploaded`);
-
-    res.status(201).json({
-      id: route._id,
-      name: route.name,
-      droneId: route.droneId,
-      status: route.status,
-      totalPoints: route.totalPoints,
-      pointsWithPhotos: route.pointsWithPhotos,
-      requiredPhotos: requiredPhotos.length,
-      uploadedPhotos: uploadedCount,
-      missingPhotos: missingPhotos,
-      createdAt: route.createdAt,
-      drone: {
-        id: drone._id,
-        droneId: drone.droneId,
-        model: drone.model,
-        serialNumber: drone.serialNumber
-      }
-    });
-
-  } catch (error) {
-    console.error('Route creation error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+]), routeController.createDrone);
 
 // POST /routes/:id/photos - Upload missing photos for existing route
 router.post('/:id/photos', upload.array('photos', 1000), async(req, res) => {
