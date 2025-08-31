@@ -45,6 +45,15 @@ droneSchema.pre('save', function(next) {
   next();
 });
 
+droneSchema.virtual('routes', {
+  ref: 'Route',
+  localField: 'droneId',
+  foreignField: 'droneId'
+});
+
+droneSchema.set('toObject', { virtuals: true });
+droneSchema.set('toJSON', { virtuals: true });
+
 // Index for faster queries
 droneSchema.index({ droneId: 1 });
 droneSchema.index({ serialNumber: 1 });

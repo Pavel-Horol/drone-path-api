@@ -6,13 +6,11 @@ import { createError } from '../utils/appError.js';
 export async function createDrone(req, res) {
   const { droneId, model, serialNumber, currentBatteryCharge, totalFlightTime } = req.body;
 
-  // Validate required fields - just throw errors, they'll be caught automatically
   if (!droneId || !model || !serialNumber) {
     throw createError.badRequest('droneId, model, and serialNumber are required');
   }
 
-  // Create and save drone - any database errors will be handled automatically
-  const drone = new Drone({
+  const drone = await Drone.create({
     droneId,
     model,
     serialNumber,
@@ -20,9 +18,6 @@ export async function createDrone(req, res) {
     totalFlightTime: totalFlightTime || 0
   });
 
-  await drone.save();
-
-  // Send success response
   res.status(201).json({
     id: drone._id,
     droneId: drone.droneId,
@@ -51,18 +46,23 @@ export async function getAllDrones(req, res) {
 
 // Get specific drone details
 export async function getDroneById(req, res) {
-  const drone = await Drone.findOne({
-    $or: [
-      { _id: req.params.id },
-      { droneId: req.params.id }
-    ]
-  });
+  const drone = await Drone
+    .findOne({
+      $or: [
+        { _id: req.params.id },
+        { droneId: req.params.id }
+      ]
+    })
+    .populate({
+      path: 'routes',
+      select: 'name status totalPoints pointsWithPhotos createdAt',
+      options: { sort: { createdAt: -1 } }
+    })
+    .lean();
 
-  if (!drone) {
-    throw createError.notFound('Drone');
-  }
+  if (!drone) throw createError.notFound('Drone');
 
-  // Get routes flown by this drone
+
   const routes = await Route.find({ droneId: drone.droneId }, {
     name: 1,
     status: 1,
