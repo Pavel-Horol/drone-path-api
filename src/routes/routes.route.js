@@ -4,8 +4,7 @@ import { autoWrapRoutes } from '../middleware/autoWrapRoutes.js';
 import {
   validateCreateRoute,
   validateUploadRoutePhotos,
-  validateGetRouteById,
-  validate
+  validateGetRouteById
 } from '../middleware/validation.js';
 import {
   createRoute,
@@ -13,7 +12,6 @@ import {
   getRouteById,
   getAllRoutes
 } from '../controllers/route.controller.js';
-import { createRouteSchema } from '../validations/route.validation.js';
 
 const router = autoWrapRoutes(Router());
 
@@ -31,7 +29,7 @@ const upload = multer({
 router.post('/', upload.fields([
   { name: 'csv', maxCount: 1 },
   { name: 'photos', maxCount: 1000 }
-]), validate(createRouteSchema), createRoute);
+]), validateCreateRoute, createRoute);
 
 // POST /routes/:id/photos - Upload missing photos for existing route
 router.post('/:id/photos', upload.array('photos', 1000), validateUploadRoutePhotos, uploadRoutePhotos);
