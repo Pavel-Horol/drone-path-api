@@ -46,11 +46,13 @@ export async function getAllDrones(req, res) {
 
 // Get specific drone details
 export async function getDroneById(req, res) {
+  const droneId = req.params.id;
+
   const drone = await Drone
     .findOne({
       $or: [
-        { _id: req.params.id },
-        { droneId: req.params.id }
+        { _id:  droneId },
+        { droneId: droneId }
       ]
     })
     .populate({
@@ -62,26 +64,7 @@ export async function getDroneById(req, res) {
 
   if (!drone) throw createError.notFound('Drone');
 
-
-  const routes = await Route.find({ droneId: drone.droneId }, {
-    name: 1,
-    status: 1,
-    totalPoints: 1,
-    pointsWithPhotos: 1,
-    createdAt: 1
-  }).sort({ createdAt: -1 }).lean();
-
-  return res.json({
-    id: drone._id,
-    droneId: drone.droneId,
-    model: drone.model,
-    serialNumber: drone.serialNumber,
-    currentBatteryCharge: drone.currentBatteryCharge,
-    totalFlightTime: drone.totalFlightTime,
-    createdAt: drone.createdAt,
-    updatedAt: drone.updatedAt,
-    routes: routes
-  });
+  return res.json(drone);
 }
 
 // Update drone info
