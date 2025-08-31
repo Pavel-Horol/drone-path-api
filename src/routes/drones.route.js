@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import Drone from '../models/Drone.js';
-import Route from '../models/Route.js';
+import Drone from '../models/drone.model.js';
+import Route from '../models/route.model.js';
 
 const router = Router();
 

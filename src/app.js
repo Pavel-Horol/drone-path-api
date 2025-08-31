@@ -2,7 +2,7 @@ import express, { json } from 'express';
 import cors from 'cors';
 import { metricsMiddleware } from './middleware/metrics.js';
 import router from './routes/index.js';
-import { register } from './config/monitoring.js';
+import { register } from './config/monitoring.config.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();

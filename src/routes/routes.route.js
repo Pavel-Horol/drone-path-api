@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import multer, { memoryStorage } from 'multer';
-import Route from '../models/Route.js';
-import Drone from '../models/Drone.js';
-import { parseCsvBuffer, getUniqueFileNames } from '../services/scvService.js';
-import { uploadPhoto, getPhotoUrl } from '../services/minioService.js';
+import Route from '../models/route.model.js';
+import Drone from '../models/drone.model.js';
+import { parseCsvBuffer, getUniqueFileNames } from '../services/scv.service.js';
+import { uploadPhoto, getPhotoUrl } from '../services/minio.service.js';
 
 const router = Router();
 

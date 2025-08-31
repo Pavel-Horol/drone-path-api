@@ -65,6 +65,7 @@ export function parseCsvBuffer(buffer) {
         if (!validation.valid) {
           return reject(new Error(`CSV validation failed: ${validation.error}`));
         }
+        return true;
       })
       .on('data', (row) => {
         if (isFirstRow) {
