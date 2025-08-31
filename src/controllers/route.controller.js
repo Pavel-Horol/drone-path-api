@@ -3,8 +3,9 @@ import routeModel from '../models/route.model.js';
 import { parseCsvBuffer, getUniqueFileNames } from '../services/scv.service.js';
 import { uploadPhoto, getPhotoUrl } from '../services/minio.service.js';
 import { createError } from '../utils/appError.js';
+import { catchAsync } from '../middleware/errorHandler.js';
 
-export async function createRoute(req, res) {
+export const createRoute = catchAsync(async(req, res) => {
   if (!req.files.csv || req.files.csv.length === 0) {
     throw createError.badRequest('CSV file is required');
   }
@@ -103,7 +104,7 @@ export async function createRoute(req, res) {
       serialNumber: drone.serialNumber
     }
   });
-}
+});
 
 // Upload missing photos for existing route
 export async function uploadRoutePhotos(req, res) {

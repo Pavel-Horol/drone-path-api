@@ -1,48 +1,37 @@
 import Drone from '../models/drone.model.js';
 import Route from '../models/route.model.js';
+import { createError } from '../utils/appError.js';
 
-// Create new drone
+// Create new drone - ZERO WRAPPERS: Just throw errors, they're caught automatically!
 export async function createDrone(req, res) {
-  try {
-    const { droneId, model, serialNumber, currentBatteryCharge, totalFlightTime } = req.body;
+  const { droneId, model, serialNumber, currentBatteryCharge, totalFlightTime } = req.body;
 
-    // Validate required fields
-    if (!droneId || !model || !serialNumber) {
-      return res.status(400).json({
-        error: 'droneId, model, and serialNumber are required'
-      });
-    }
-
-    const drone = new Drone({
-      droneId,
-      model,
-      serialNumber,
-      currentBatteryCharge: currentBatteryCharge || 100,
-      totalFlightTime: totalFlightTime || 0
-    });
-
-    await drone.save();
-
-    return res.status(201).json({
-      id: drone._id,
-      droneId: drone.droneId,
-      model: drone.model,
-      serialNumber: drone.serialNumber,
-      currentBatteryCharge: drone.currentBatteryCharge,
-      totalFlightTime: drone.totalFlightTime,
-      createdAt: drone.createdAt
-    });
-
-  } catch (error) {
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyValue)[0];
-      return res.status(409).json({
-        error: `${field} already exists: ${error.keyValue[field]}`
-      });
-    }
-    console.error('Drone creation error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+  // Validate required fields - just throw errors, they'll be caught automatically
+  if (!droneId || !model || !serialNumber) {
+    throw createError.badRequest('droneId, model, and serialNumber are required');
   }
+
+  // Create and save drone - any database errors will be handled automatically
+  const drone = new Drone({
+    droneId,
+    model,
+    serialNumber,
+    currentBatteryCharge: currentBatteryCharge || 100,
+    totalFlightTime: totalFlightTime || 0
+  });
+
+  await drone.save();
+
+  // Send success response
+  res.status(201).json({
+    id: drone._id,
+    droneId: drone.droneId,
+    model: drone.model,
+    serialNumber: drone.serialNumber,
+    currentBatteryCharge: drone.currentBatteryCharge,
+    totalFlightTime: drone.totalFlightTime,
+    createdAt: drone.createdAt
+  });
 }
 
 // List all drones

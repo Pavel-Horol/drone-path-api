@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { autoWrapRoutes } from '../middleware/autoWrapRoutes.js';
 import {
   createDrone,
   getAllDrones,
@@ -8,7 +9,7 @@ import {
   assignDroneToRoute
 } from '../controllers/drone.controller.js';
 
-const router = Router();
+const router = autoWrapRoutes(Router());
 
 // POST /drones - Create new drone
 router.post('/', createDrone);

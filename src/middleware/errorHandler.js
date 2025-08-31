@@ -1,112 +1,149 @@
-
+// Advanced Error Handler Middleware
 import { AppError } from '../utils/appError.js';
 
-// Global async error catcher - wraps all route handlers automatically
-export function catchAsync(app) {
-  // Override Express route methods to automatically catch async errors
-  const originalMethods = {};
-  const methods = ['get', 'post', 'put', 'patch', 'delete'];
-
-  methods.forEach(method => {
-    originalMethods[method] = app[method];
-    app[method] = function(path, ...handlers) {
-      const wrappedHandlers = handlers.map(handler => {
-        if (handler.constructor.name === 'AsyncFunction') {
-          return (req, res, next) => {
-            Promise.resolve(handler(req, res, next)).catch(next);
-          };
-        }
-        return handler;
-      });
-      return originalMethods[method].call(this, path, ...wrappedHandlers);
-    };
-  });
+// Utility function to wrap async route handlers and catch errors automatically
+export function catchAsync(fn) {
+  return (req, res, next) => {
+    fn(req, res, next).catch(next);
+  };
 }
 
-// Error handler middleware
-export function errorHandler(err, req, res, _next) {
-  let error = { ...err };
-  error.message = err.message;
-
-  // Log error for debugging
-  console.error('Error:', {
-    message: err.message,
-    stack: err.stack,
-    url: req.originalUrl,
-    method: req.method,
-    ip: req.ip,
-    timestamp: new Date().toISOString()
-  });
-
-  // Mongoose bad ObjectId
-  if (err.name === 'CastError') {
-    const message = `Resource not found with id: ${err.value}`;
-    error = new AppError(message, 404);
-  }
-
-  // Mongoose duplicate key error
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyValue)[0];
-    const value = err.keyValue[field];
-    const message = `Duplicate value '${value}' for field '${field}'. Please use another value.`;
-    error = new AppError(message, 400);
-  }
-
-  // Mongoose validation error
+// Handle MongoDB/Mongoose errors
+const handleMongooseError = (err) => {
   if (err.name === 'ValidationError') {
     const errors = Object.values(err.errors).map(val => val.message);
-    const message = `Invalid input data: ${errors.join('. ')}`;
-    error = new AppError(message, 400);
+    return new AppError(`Invalid input data: ${errors.join('. ')}`, 400);
   }
 
-  // JWT errors
+  if (err.name === 'CastError') {
+    return new AppError('Invalid resource ID format', 400);
+  }
+
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyValue)[0];
+    return new AppError(`${field} already exists: ${err.keyValue[field]}`, 409);
+  }
+
+  if (err.name === 'MongoNetworkError') {
+    return new AppError('Database connection error', 503);
+  }
+
+  return new AppError('Database operation failed', 500);
+};
+
+// Handle JWT errors
+const handleJWTError = (err) => {
   if (err.name === 'JsonWebTokenError') {
-    const message = 'Invalid token. Please log in again.';
-    error = new AppError(message, 401);
+    return new AppError('Invalid token. Please log in again.', 401);
   }
 
   if (err.name === 'TokenExpiredError') {
-    const message = 'Your token has expired. Please log in again.';
-    error = new AppError(message, 401);
+    return new AppError('Your token has expired. Please log in again.', 401);
   }
 
-  // Multer errors
+  return new AppError('Authentication error', 401);
+};
+
+// Handle Multer file upload errors
+const handleMulterError = (err) => {
   if (err.code === 'LIMIT_FILE_SIZE') {
-    const message = 'File too large. Please upload a smaller file.';
-    error = new AppError(message, 400);
+    return new AppError('File too large. Maximum size allowed is 5MB.', 400);
+  }
+
+  if (err.code === 'LIMIT_FILE_COUNT') {
+    return new AppError('Too many files uploaded.', 400);
   }
 
   if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-    const message = 'Too many files uploaded or unexpected field name.';
-    error = new AppError(message, 400);
+    return new AppError('Unexpected file field.', 400);
   }
 
-  // Default to 500 server error
-  const statusCode = error.statusCode || 500;
-  const status = error.status || 'error';
+  return new AppError('File upload error', 400);
+};
 
-  // Send error response
-  res.status(statusCode).json({
+// Send error response based on environment
+const sendErrorResponse = (err, req, res) => {
+  const isDevelopment = process.env.NODE_ENV === 'development';
+
+  // Log error with request context
+  const timestamp = new Date().toISOString();
+  const requestId = req.id || req.headers['x-request-id'] || 'unknown';
+
+  console.error(`[${timestamp}] [${requestId}] Error:`, {
+    message: err.message,
+    stack: isDevelopment ? err.stack : undefined,
+    url: req.originalUrl,
+    method: req.method,
+    ip: req.ip,
+    userAgent: req.get('User-Agent')
+  });
+
+  // Send appropriate response
+  if (err.isOperational) {
+    // Operational errors (trusted errors)
+    return res.status(err.statusCode).json({
+      success: false,
+      status: err.status,
+      message: err.message,
+      ...(isDevelopment && {
+        stack: err.stack,
+        error: err
+      })
+    });
+  }
+
+  // Programming errors (untrusted errors) - don't leak details
+  return res.status(500).json({
     success: false,
-    status,
-    message: error.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && {
+    status: 'error',
+    message: isDevelopment ? err.message : 'Something went wrong!',
+    ...(isDevelopment && {
       stack: err.stack,
       error: err
     })
   });
+};
+
+// Main error handler middleware
+export function errorHandler(err, req, res, _next) {
+  let error = { ...err };
+  error.message = err.message;
+
+  // Handle specific error types
+  if (err.name === 'ValidationError' || err.name === 'CastError' || err.code === 11000 || err.name === 'MongoNetworkError') {
+    error = handleMongooseError(err);
+  } else if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+    error = handleJWTError(err);
+  } else if (err.name === 'MulterError') {
+    error = handleMulterError(err);
+  }
+
+  // Default error properties
+  error.statusCode = error.statusCode || 500;
+  error.status = error.status || 'error';
+  error.isOperational = error.isOperational !== undefined ? error.isOperational : false;
+
+  return sendErrorResponse(error, req, res);
 }
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION! 💥 Shutting down...');
-  console.error(err.name, err.message);
-  process.exit(1);
+// Global unhandled promise rejection handler
+process.on('unhandledRejection', (err, promise) => {
+  console.error('Unhandled Promise Rejection:', err);
+  console.error('Promise:', promise);
+
+  // In production, you might want to gracefully shutdown the server
+  // For now, we'll just log it and continue
+  if (process.env.NODE_ENV === 'production') {
+    console.error('Shutting down server due to unhandled promise rejection...');
+    process.exit(1);
+  }
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-  console.error('UNHANDLED REJECTION! 💥 Shutting down...');
-  console.error(err.name, err.message);
+// Global uncaught exception handler
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+
+  // Always shutdown on uncaught exceptions
+  console.error('Shutting down server due to uncaught exception...');
   process.exit(1);
 });

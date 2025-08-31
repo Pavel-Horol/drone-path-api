@@ -3,12 +3,9 @@ import cors from 'cors';
 import { metricsMiddleware } from './middleware/metrics.js';
 import router from './routes/index.js';
 import { register } from './config/monitoring.config.js';
-import { errorHandler, catchAsync } from './middleware/errorHandler.js';
+import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
-
-// Enable automatic async error catching for all routes
-catchAsync(app);
 
 // Middleware
 app.use(cors());

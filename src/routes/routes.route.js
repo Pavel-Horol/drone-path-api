@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer, { memoryStorage } from 'multer';
+import { autoWrapRoutes } from '../middleware/autoWrapRoutes.js';
 import {
   createRoute,
   uploadRoutePhotos,
@@ -7,7 +8,7 @@ import {
   getAllRoutes
 } from '../controllers/route.controller.js';
 
-const router = Router();
+const router = autoWrapRoutes(Router());
 
 // Configure multer for file uploads
 const storage = memoryStorage();
