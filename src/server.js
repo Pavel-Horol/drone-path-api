@@ -4,6 +4,7 @@ dotenv.config();
 import express, { json } from 'express';
 import cors from 'cors';
 import routesRouter from './routes/routes.js';
+import dronesRouter from './routes/drones.js';
 import { connect } from 'mongoose';
 import { initializeMinio } from './services/minioService.js';
 import { collectDefaultMetrics, register as _register, Histogram, Counter } from 'prom-client';
@@ -63,6 +64,7 @@ app.get('/metrics', async (req, res) => {
 
 // Routes
 app.use('/routes', routesRouter);
+app.use('/drones', dronesRouter);
 
 // Health check
 app.get('/health', (req, res) => {

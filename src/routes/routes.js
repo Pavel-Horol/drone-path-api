@@ -27,6 +27,22 @@ router.post('/', upload.fields([
       return res.status(400).json({ error: 'CSV file is required' });
     }
 
+    if (!req.body.droneId) {
+      return res.status(400).json({ error: 'droneId is required' });
+    }
+
+    // Validate that drone exists
+    const drone = await Drone.findOne({ 
+      $or: [
+        { _id: req.body.droneId },
+        { droneId: req.body.droneId }
+      ]
+    });
+
+    if (!drone) {
+      return res.status(404).json({ error: 'Drone not found' });
+    }
+
     const csvFile = req.files.csv[0];
     const photoFiles = req.files.photos || [];
     const routeName = req.body.name || `Route_${Date.now()}`;
@@ -48,6 +64,7 @@ router.post('/', upload.fields([
 
     const route = new Route({
       name: routeName,
+      droneId: drone.droneId,
       points: points
     });
 
@@ -93,13 +110,20 @@ router.post('/', upload.fields([
     res.status(201).json({
       id: route._id,
       name: route.name,
+      droneId: route.droneId,
       status: route.status,
       totalPoints: route.totalPoints,
       pointsWithPhotos: route.pointsWithPhotos,
       requiredPhotos: requiredPhotos.length,
       uploadedPhotos: uploadedCount,
       missingPhotos: missingPhotos,
-      createdAt: route.createdAt
+      createdAt: route.createdAt,
+      drone: {
+        id: drone._id,
+        droneId: drone.droneId,
+        model: drone.model,
+        serialNumber: drone.serialNumber
+      }
     });
 
   } catch (error) {
@@ -221,6 +245,7 @@ router.get('/:id', async (req, res) => {
     res.json({
       id: route._id,
       name: route.name,
+      droneId: route.droneId,
       status: route.status,
       totalPoints: route.totalPoints,
       pointsWithPhotos: route.pointsWithPhotos,
@@ -240,6 +265,7 @@ router.get('/', async (req, res) => {
   try {
     const routes = await Route.find({}, {
       name: 1,
+      droneId: 1,
       status: 1,
       totalPoints: 1,
       pointsWithPhotos: 1,
