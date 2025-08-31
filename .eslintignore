@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+coverage/
+*.min.js
+*.log
+.env
+.env.local
+.env.production
+.env.development
+observability/
+docker-compose.yml
+dockerfile
+.dockerignore
+.gitignore
+package-lock.json
