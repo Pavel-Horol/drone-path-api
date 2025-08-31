@@ -53,7 +53,7 @@ export function parseCsvBuffer(buffer) {
     let isFirstRow = true;
 
     const stream = Readable.from(buffer);
-    
+
     stream
       .pipe(csv({
         skipEmptyLines: true,
@@ -70,7 +70,7 @@ export function parseCsvBuffer(buffer) {
         if (isFirstRow) {
           isFirstRow = false;
         }
-        
+
         // Map CSV columns to our schema
         const point = {
           fileName: row['file name']?.trim(),

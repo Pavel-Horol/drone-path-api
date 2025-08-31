@@ -1,41 +1,41 @@
 import { Schema, model } from 'mongoose';
 
 const droneSchema = new Schema({
-  droneId: { 
-    type: String, 
-    required: true, 
+  droneId: {
+    type: String,
+    required: true,
     unique: true,
     trim: true
   },
-  model: { 
-    type: String, 
+  model: {
+    type: String,
     required: true,
     trim: true
   },
-  serialNumber: { 
-    type: String, 
-    required: true, 
+  serialNumber: {
+    type: String,
+    required: true,
     unique: true,
     trim: true
   },
-  currentBatteryCharge: { 
-    type: Number, 
-    min: 0, 
-    max: 100, 
-    default: 100 
+  currentBatteryCharge: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 100
   },
-  totalFlightTime: { 
-    type: Number, 
+  totalFlightTime: {
+    type: Number,
     default: 0,
     min: 0
   }, // in minutes
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
+  createdAt: {
+    type: Date,
+    default: Date.now
   },
-  updatedAt: { 
-    type: Date, 
-    default: Date.now 
+  updatedAt: {
+    type: Date,
+    default: Date.now
   }
 });
 

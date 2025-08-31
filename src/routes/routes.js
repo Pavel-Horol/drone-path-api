@@ -9,7 +9,7 @@ const router = Router();
 
 // Configure multer for file uploads
 const storage = memoryStorage();
-const upload = multer({ 
+const upload = multer({
   storage,
   limits: {
     fileSize: 100 * 1024 * 1024,
@@ -21,7 +21,7 @@ const upload = multer({
 router.post('/', upload.fields([
   { name: 'csv', maxCount: 1 },
   { name: 'photos', maxCount: 1000 }
-]), async (req, res) => {
+]), async(req, res) => {
   try {
     if (!req.files.csv || req.files.csv.length === 0) {
       return res.status(400).json({ error: 'CSV file is required' });
@@ -32,7 +32,7 @@ router.post('/', upload.fields([
     }
 
     // Validate that drone exists
-    const drone = await Drone.findOne({ 
+    const drone = await Drone.findOne({
       $or: [
         { _id: req.body.droneId },
         { droneId: req.body.droneId }
@@ -93,7 +93,7 @@ router.post('/', upload.fields([
           .catch((error) => {
             console.error(`Failed to upload ${point.fileName}:`, error);
           });
-        
+
         uploadPromises.push(uploadPromise);
       }
     }
@@ -133,7 +133,7 @@ router.post('/', upload.fields([
 });
 
 // POST /routes/:id/photos - Upload missing photos for existing route
-router.post('/:id/photos', upload.array('photos', 1000), async (req, res) => {
+router.post('/:id/photos', upload.array('photos', 1000), async(req, res) => {
   try {
     const route = await Route.findById(req.params.id);
     if (!route) {
@@ -156,10 +156,10 @@ router.post('/:id/photos', upload.array('photos', 1000), async (req, res) => {
 
     for (let i = 0; i < route.points.length; i++) {
       const point = route.points[i];
-      
+
       if (!point.hasPhoto && photoMap.has(point.fileName)) {
         const photo = photoMap.get(point.fileName);
-        
+
         const uploadPromise = uploadPhoto(route._id.toString(), point.fileName, photo.buffer, photo.mimetype)
           .then((objectKey) => {
             route.points[i].photoUrl = objectKey;
@@ -169,7 +169,7 @@ router.post('/:id/photos', upload.array('photos', 1000), async (req, res) => {
           .catch((error) => {
             console.error(`Failed to upload ${point.fileName}:`, error);
           });
-        
+
         uploadPromises.push(uploadPromise);
       }
     }
@@ -198,14 +198,14 @@ router.post('/:id/photos', upload.array('photos', 1000), async (req, res) => {
 });
 
 // GET /routes/:id - Get route data for mapping
-router.get('/:id', async (req, res) => {
+router.get('/:id', async(req, res) => {
   try {
     const route = await Route.findById(req.params.id);
     if (!route) {
       return res.status(404).json({ error: 'Route not found' });
     }
 
-    const pointsWithUrls = await Promise.all(route.points.map(async (point) => {
+    const pointsWithUrls = await Promise.all(route.points.map(async(point) => {
       let photoUrl = null;
       if (point.hasPhoto && point.photoUrl) {
         try {
@@ -261,7 +261,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // GET /routes - List all routes
-router.get('/', async (req, res) => {
+router.get('/', async(req, res) => {
   try {
     const routes = await Route.find({}, {
       name: 1,

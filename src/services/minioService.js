@@ -5,7 +5,7 @@ const minioClient = new Client({
   port: parseInt(process.env.MINIO_PORT) || 9000,
   useSSL: false,
   accessKey: process.env.MINIO_ACCESS_KEY || 'minioadmin',
-  secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin',
+  secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin'
 });
 
 export const BUCKET_NAME = process.env.MINIO_BUCKET || 'drone-photos';
@@ -28,7 +28,7 @@ export async function initializeMinio() {
 export async function uploadPhoto(routeId, fileName, fileBuffer, contentType) {
   try {
     const objectKey = `routes/${routeId}/${fileName}`;
-    
+
     const metaData = {
       'Content-Type': contentType || 'image/tiff',
       'X-Route-ID': routeId
@@ -51,7 +51,7 @@ export async function getPhotoUrl(objectKey) {
     );
     return url;
   } catch (error) {
-    console.error("Error generating presigned URL:", error);
+    console.error('Error generating presigned URL:', error);
     throw error;
   }
 }

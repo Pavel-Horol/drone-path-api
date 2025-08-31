@@ -5,14 +5,14 @@ import Route from '../models/Route.js';
 const router = Router();
 
 // POST /drones - Create new drone
-router.post('/', async (req, res) => {
+router.post('/', async(req, res) => {
   try {
     const { droneId, model, serialNumber, currentBatteryCharge, totalFlightTime } = req.body;
 
     // Validate required fields
     if (!droneId || !model || !serialNumber) {
-      return res.status(400).json({ 
-        error: 'droneId, model, and serialNumber are required' 
+      return res.status(400).json({
+        error: 'droneId, model, and serialNumber are required'
       });
     }
 
@@ -39,8 +39,8 @@ router.post('/', async (req, res) => {
   } catch (error) {
     if (error.code === 11000) {
       const field = Object.keys(error.keyValue)[0];
-      return res.status(409).json({ 
-        error: `${field} already exists: ${error.keyValue[field]}` 
+      return res.status(409).json({
+        error: `${field} already exists: ${error.keyValue[field]}`
       });
     }
     console.error('Drone creation error:', error);
@@ -49,7 +49,7 @@ router.post('/', async (req, res) => {
 });
 
 // GET /drones - List all drones
-router.get('/', async (req, res) => {
+router.get('/', async(req, res) => {
   try {
     const drones = await Drone.find({}, {
       droneId: 1,
@@ -69,9 +69,9 @@ router.get('/', async (req, res) => {
 });
 
 // GET /drones/:id - Get specific drone details
-router.get('/:id', async (req, res) => {
+router.get('/:id', async(req, res) => {
   try {
-    const drone = await Drone.findOne({ 
+    const drone = await Drone.findOne({
       $or: [
         { _id: req.params.id },
         { droneId: req.params.id }
@@ -110,7 +110,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // PUT /drones/:id - Update drone info
-router.put('/:id', async (req, res) => {
+router.put('/:id', async(req, res) => {
   try {
     const { model, currentBatteryCharge, totalFlightTime } = req.body;
 
@@ -118,23 +118,23 @@ router.put('/:id', async (req, res) => {
     if (model !== undefined) updateData.model = model;
     if (currentBatteryCharge !== undefined) {
       if (currentBatteryCharge < 0 || currentBatteryCharge > 100) {
-        return res.status(400).json({ 
-          error: 'currentBatteryCharge must be between 0 and 100' 
+        return res.status(400).json({
+          error: 'currentBatteryCharge must be between 0 and 100'
         });
       }
       updateData.currentBatteryCharge = currentBatteryCharge;
     }
     if (totalFlightTime !== undefined) {
       if (totalFlightTime < 0) {
-        return res.status(400).json({ 
-          error: 'totalFlightTime cannot be negative' 
+        return res.status(400).json({
+          error: 'totalFlightTime cannot be negative'
         });
       }
       updateData.totalFlightTime = totalFlightTime;
     }
 
     const drone = await Drone.findOneAndUpdate(
-      { 
+      {
         $or: [
           { _id: req.params.id },
           { droneId: req.params.id }
@@ -165,10 +165,10 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /drones/:id - Delete drone
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async(req, res) => {
   try {
     // Check if drone has associated routes
-    const drone = await Drone.findOne({ 
+    const drone = await Drone.findOne({
       $or: [
         { _id: req.params.id },
         { droneId: req.params.id }
@@ -180,16 +180,16 @@ router.delete('/:id', async (req, res) => {
     }
 
     const routeCount = await Route.countDocuments({ droneId: drone.droneId });
-    
+
     if (routeCount > 0) {
-      return res.status(400).json({ 
-        error: `Cannot delete drone. It has ${routeCount} associated routes. Delete routes first.` 
+      return res.status(400).json({
+        error: `Cannot delete drone. It has ${routeCount} associated routes. Delete routes first.`
       });
     }
 
     await Drone.findByIdAndDelete(drone._id);
 
-    res.json({ 
+    res.json({
       message: 'Drone deleted successfully',
       deletedDrone: {
         id: drone._id,
@@ -206,10 +206,10 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST /drones/:droneId/assign-route/:routeId - Assign drone to route
-router.post('/:droneId/assign-route/:routeId', async (req, res) => {
+router.post('/:droneId/assign-route/:routeId', async(req, res) => {
   try {
     // Check if drone exists
-    const drone = await Drone.findOne({ 
+    const drone = await Drone.findOne({
       $or: [
         { _id: req.params.droneId },
         { droneId: req.params.droneId }

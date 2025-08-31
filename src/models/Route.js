@@ -28,8 +28,8 @@ const pointSchema = new Schema({
 
 const routeSchema = new Schema({
   name: { type: String, required: true },
-  droneId: { 
-    type: String, 
+  droneId: {
+    type: String,
     required: true,
     trim: true,
     ref: 'Drone'
@@ -39,10 +39,10 @@ const routeSchema = new Schema({
   totalPoints: { type: Number, default: 0 },
   pointsWithPhotos: { type: Number, default: 0 },
   points: [pointSchema],
-  status: { 
-    type: String, 
-    enum: ['processing', 'complete', 'partial'], 
-    default: 'processing' 
+  status: {
+    type: String,
+    enum: ['processing', 'complete', 'partial'],
+    default: 'processing'
   }
 });
 
@@ -52,7 +52,7 @@ routeSchema.pre('save', function(next) {
   this.updatedAt = new Date();
   this.totalPoints = this.points.length;
   this.pointsWithPhotos = this.points.filter(p => p.hasPhoto).length;
-  
+
   // Set status based on photo completion
   if (this.pointsWithPhotos === 0) {
     this.status = 'processing';
@@ -61,7 +61,7 @@ routeSchema.pre('save', function(next) {
   } else {
     this.status = 'partial';
   }
-  
+
   next();
 });
 
