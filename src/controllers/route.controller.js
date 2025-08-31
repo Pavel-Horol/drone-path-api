@@ -23,9 +23,7 @@ export async function createRoute(req, res) {
     throw createError.badRequest(`CSV parsing failed: ${error.message}`);
   }
 
-  if (points.length === 0) {
-    throw createError.badRequest('No valid data points found in CSV');
-  }
+  if (points.length === 0) throw createError.badRequest('No valid data points found in CSV');
 
   const route = new routeModel({
     name: routeName,
@@ -80,9 +78,7 @@ export async function createRoute(req, res) {
 // Upload missing photos for existing route
 export async function uploadRoutePhotos(req, res) {
   const route = await routeModel.findById(req.params.id);
-  if (!route) {
-    throw createError.notFound('Route');
-  }
+  if (!route) throw createError.notFound('Route');
 
   if (!req.files || req.files.length === 0) {
     throw createError.badRequest('No photos provided');
@@ -139,9 +135,7 @@ export async function uploadRoutePhotos(req, res) {
 // Get route data for mapping
 export async function getRouteById(req, res) {
   const route = await routeModel.findById(req.params.id);
-  if (!route) {
-    throw createError.notFound('Route');
-  }
+  if (!route) throw createError.notFound('Route');
 
   const pointsWithUrls = await Promise.all(route.points.map(async(point) => {
     let photoUrl = null;

@@ -6,9 +6,8 @@ import { createError } from '../utils/appError.js';
 export async function createDrone(req, res) {
   const { model, serialNumber, currentBatteryCharge, totalFlightTime } = req.body;
 
-  if (!model || !serialNumber) {
-    throw createError.badRequest('model and serialNumber are required');
-  }
+  if (!model || !serialNumber) throw createError.badRequest('model and serialNumber are required');
+
 
   const drone = await Drone.create({
     model,
@@ -70,9 +69,8 @@ export async function updateDrone(req, res) {
     updateData.currentBatteryCharge = currentBatteryCharge;
   }
   if (totalFlightTime !== undefined) {
-    if (totalFlightTime < 0) {
-      throw createError.badRequest('totalFlightTime cannot be negative');
-    }
+    if (totalFlightTime < 0) throw createError.badRequest('totalFlightTime cannot be negative');
+
     updateData.totalFlightTime = totalFlightTime;
   }
 
@@ -82,9 +80,8 @@ export async function updateDrone(req, res) {
     { new: true }
   );
 
-  if (!drone) {
-    throw createError.notFound('Drone');
-  }
+  if (!drone) throw createError.notFound('Drone');
+
 
   return res.json({
     id: drone._id,
@@ -98,18 +95,15 @@ export async function updateDrone(req, res) {
 
 // Delete drone
 export async function deleteDrone(req, res) {
-  // Check if drone has associated routes
   const drone = await Drone.findById(req.params.id);
 
-  if (!drone) {
-    throw createError.notFound('Drone');
-  }
+  if (!drone) throw createError.notFound('Drone');
+
 
   const routeCount = await Route.countDocuments({ droneId: drone._id });
 
-  if (routeCount > 0) {
-    throw createError.badRequest(`Cannot delete drone. It has ${routeCount} associated routes. Delete routes first.`);
-  }
+  if (routeCount > 0) throw createError.badRequest(`Cannot delete drone. It has ${routeCount} associated routes. Delete routes first.`);
+
 
   await Drone.findByIdAndDelete(drone._id);
 
@@ -125,20 +119,15 @@ export async function deleteDrone(req, res) {
 
 // Assign drone to route
 export async function assignDroneToRoute(req, res) {
-  // Check if drone exists
   const drone = await Drone.findById(req.params.droneId);
 
-  if (!drone) {
-    throw createError.notFound('Drone');
-  }
+  if (!drone) throw createError.notFound('Drone');
 
-  // Check if route exists
+
   const route = await Route.findById(req.params.routeId);
-  if (!route) {
-    throw createError.notFound('Route');
-  }
+  if (!route) throw createError.notFound('Route');
 
-  // Update route with drone assignment
+
   route.droneId = drone._id;
   await route.save();
 
