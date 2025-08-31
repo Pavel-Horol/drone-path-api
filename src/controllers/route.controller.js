@@ -1,8 +1,8 @@
-import droneModel from '@/models/drone.model';
-import routeModel from '@/models/route.model';
-import { parseCsvBuffer, getUniqueFileNames } from '@/services/scv.service';
-import { uploadPhoto, getPhotoUrl } from '@/services/minio.service';
-import { createError } from '@/utils/appError';
+import droneModel from '../models/drone.model.js';
+import routeModel from '../models/route.model.js';
+import { parseCsvBuffer, getUniqueFileNames } from '../services/scv.service.js';
+import { uploadPhoto, getPhotoUrl } from '../services/minio.service.js';
+import { createError } from '../utils/appError.js';
 
 export async function createRoute(req, res) {
   if (!req.files.csv || req.files.csv.length === 0) {

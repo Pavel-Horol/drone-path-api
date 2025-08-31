@@ -1,4 +1,4 @@
-import { httpRequestDuration, httpRequestsTotal } from '@/config/monitoring.config.js';
+import { httpRequestDuration, httpRequestsTotal } from '../config/monitoring.config.js';
 
 export async function metricsMiddleware(req, res, next) {
   const start = process.hrtime.bigint();
