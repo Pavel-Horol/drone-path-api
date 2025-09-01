@@ -8,17 +8,6 @@ import {
   assignDroneToRouteSchema
 } from '../validations/drone.validation.js';
 
-export const validate = (schema) => (async(req, res, next) => {
-  try {
-    const validator = vine.compile(schema);
-    await validator.validate(req.body);
-    next();
-  }  catch (error) {
-    next(error);
-  }
-});
-
-
 // Route validation middleware
 export const validateCreateRoute = async(req, res, next) => {
   try {
@@ -50,7 +39,6 @@ export const validateGetRouteById = async(req, res, next) => {
   }
 };
 
-// Drone validation middleware
 export const validateCreateDrone = async(req, res, next) => {
   try {
     const validator = vine.compile(createDroneSchema);
