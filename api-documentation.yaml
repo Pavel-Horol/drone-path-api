@@ -1,0 +1,503 @@
+openapi: 3.0.0
+info:
+  title: Drone Routes Service API
+  version: 1.0.0
+  description: MVP service for drone multispectral photo routes
+  contact:
+    name: Drone Routes Team
+servers:
+  - 
+    url: http://localhost:3000
+    description: Development server
+
+paths:
+  /api/v1/drones/:
+    post:
+      tags:
+        - drones
+      summary: Create Drones
+      description: Create a new drone
+      parameters:
+      responses:
+        201:
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/dronesResponse
+        400:
+          description: Bad Request
+        500:
+          description: Internal Server Error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/CreateDroneRequest
+          multipart/form-data:
+            schema:
+              $ref: #/components/schemas/CreateDroneRequestMultipart
+    get:
+      tags:
+        - drones
+      summary: List Drones
+      description: Retrieve a list of all drones
+      parameters:
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/dronesResponse
+        404:
+          description: Not Found
+        500:
+          description: Internal Server Error
+  /api/v1/drones/:id:
+    get:
+      tags:
+        - drones
+      summary: Get Drones
+      description: Retrieve details of a specific drone
+      parameters:
+        - 
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: id identifier
+
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/dronesResponse
+        404:
+          description: Not Found
+        500:
+          description: Internal Server Error
+    put:
+      tags:
+        - drones
+      summary: Update Drones
+      description: Update an existing drone
+      parameters:
+        - 
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: id identifier
+
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/dronesResponse
+        404:
+          description: Not Found
+        500:
+          description: Internal Server Error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/UpdateDroneRequest
+          multipart/form-data:
+            schema:
+              $ref: #/components/schemas/UpdateDroneRequestMultipart
+    delete:
+      tags:
+        - drones
+      summary: Delete Drones
+      description: Delete a drone
+      parameters:
+        - 
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: id identifier
+
+      responses:
+        200:
+          description: Deleted successfully
+        404:
+          description: Not Found
+        500:
+          description: Internal Server Error
+  /api/v1/drones/:droneId/assign-route/:routeId:
+    post:
+      tags:
+        - drones
+      summary: Create Drones
+      description: POST operation on drones
+      parameters:
+        - 
+          name: droneId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: droneId identifier
+
+        - 
+          name: routeId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: routeId identifier
+
+      responses:
+        201:
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/dronesResponse
+        400:
+          description: Bad Request
+        500:
+          description: Internal Server Error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/CreateDroneRequest
+          multipart/form-data:
+            schema:
+              $ref: #/components/schemas/CreateDroneRequestMultipart
+  /api/v1/routes/:
+    post:
+      tags:
+        - routes
+      summary: Create Routes
+      description: Create a new route
+      parameters:
+      responses:
+        201:
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/routesResponse
+        400:
+          description: Bad Request
+        500:
+          description: Internal Server Error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/CreateRouteRequest
+          multipart/form-data:
+            schema:
+              $ref: #/components/schemas/CreateRouteRequestMultipart
+    get:
+      tags:
+        - routes
+      summary: List Routes
+      description: Retrieve a list of all routes
+      parameters:
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/routesResponse
+        404:
+          description: Not Found
+        500:
+          description: Internal Server Error
+  /api/v1/routes/:id/photos:
+    post:
+      tags:
+        - routes
+      summary: Create Routes
+      description: POST operation on routes
+      parameters:
+        - 
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: id identifier
+
+      responses:
+        201:
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/routesResponse
+        400:
+          description: Bad Request
+        500:
+          description: Internal Server Error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: #/components/schemas/CreateRouteRequest
+          multipart/form-data:
+            schema:
+              $ref: #/components/schemas/CreateRouteRequestMultipart
+  /api/v1/routes/:id:
+    get:
+      tags:
+        - routes
+      summary: Get Routes
+      description: Retrieve details of a specific route
+      parameters:
+        - 
+          name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: id identifier
+
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: #/components/schemas/routesResponse
+        404:
+          description: Not Found
+        500:
+          description: Internal Server Error
+components:
+  schemas:
+    Drone:
+      type: object
+      properties:
+        model:
+          type: string
+        serialNumber:
+          type: string
+        currentBatteryCharge:
+          type: number
+        totalFlightTime:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Route:
+      type: object
+      properties:
+        fileName:
+          type: string
+        date:
+          type: string
+        time:
+          type: string
+        timeStatus:
+          type: string
+        aex:
+          type: string
+        latitude:
+          type: string
+        longitude:
+          type: string
+        speed:
+          type: string
+        course:
+          type: string
+        magn:
+          type: string
+        altitude:
+          type: string
+        spp:
+          type: string
+        srr:
+          type: string
+        mLux:
+          type: string
+        rIr1:
+          type: string
+        gIr:
+          type: string
+        rIr2:
+          type: string
+        iIr:
+          type: string
+        iBright:
+          type: string
+        shutter:
+          type: string
+        gain:
+          type: string
+        photoUrl:
+          type: string
+        hasPhoto:
+          type: boolean
+        name:
+          type: string
+        droneId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        totalPoints:
+          type: number
+        pointsWithPhotos:
+          type: number
+        status:
+          type: string
+    DroneResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 64f1a2b3c4d5e6f7g8h9i0j
+        model:
+          type: string
+          example: DJI Mavic 3
+        serialNumber:
+          type: string
+          example: DJI001234
+        currentBatteryCharge:
+          type: number
+          example: 85
+        totalFlightTime:
+          type: number
+          example: 120
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    RouteResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 64f1a2b3c4d5e6f7g8h9i0k
+        name:
+          type: string
+          example: Farm_Field_A_2024
+        droneId:
+          type: string
+          example: 64f1a2b3c4d5e6f7g8h9i0j
+        status:
+          type: string
+          enum:
+            - processing
+            - complete
+            - partial
+          example: complete
+        totalPoints:
+          type: number
+          example: 150
+        pointsWithPhotos:
+          type: number
+          example: 150
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        points:
+          type: array
+          items:
+            $ref: #/components/schemas/RoutePoint
+    RoutePoint:
+      type: object
+      properties:
+        fileName:
+          type: string
+          example: IMG_001.jpg
+        date:
+          type: string
+          example: 2024-01-15
+        time:
+          type: string
+          example: 14:30:25
+        latitude:
+          type: string
+          example: 40.7128
+        longitude:
+          type: string
+          example: -74.0060
+        altitude:
+          type: string
+          example: 50.5
+        speed:
+          type: string
+          example: 15.2
+        course:
+          type: string
+          example: 90.0
+        hasPhoto:
+          type: boolean
+          example: true
+        photoUrl:
+          type: string
+          example: https://minio.example.com/routes/64f1a2b3c4d5e6f7g8h9i0k/IMG_001.jpg
+        sensorData:
+          type: object
+          properties:
+            mLux:
+              type: string
+              example: 45000
+            rIr1:
+              type: string
+              example: 120
+            gIr:
+              type: string
+              example: 135
+            rIr2:
+              type: string
+              example: 118
+    CreateRouteRequestMultipart:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Farm_Field_A_2024
+        csv:
+          type: string
+          format: binary
+          description: CSV file containing GPS coordinates and sensor data
+        photos:
+          type: array
+          items:
+            type: string
+            format: binary
+          description: Array of photo files to associate with GPS points
+  securitySchemes:
+tags:
+  - 
+    name: drones
+    description: Drone management operations
+
+  - 
+    name: routes
+    description: Flight route management with photo capture
+
