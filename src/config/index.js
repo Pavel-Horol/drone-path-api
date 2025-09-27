@@ -9,6 +9,7 @@ export const config = {
     accessKey: process.env.MINIO_ACCESS_KEY,
     secretKey: process.env.MINIO_SECRET_KEY,
     port: process.env.MINIO_PORT ? parseInt(process.env.MINIO_PORT) : 9000,
+    serverUrl: process.env.MINIO_SERVER_URL,
     bucket: process.env.MINIO_BUCKET || 'drone-photos'
   }
 };

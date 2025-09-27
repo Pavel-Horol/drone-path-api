@@ -45,14 +45,11 @@ export async function uploadPhoto(routeId, fileName, fileBuffer, contentType) {
 
 export async function getPhotoUrl(objectKey) {
   try {
-    const url = await minioClient.presignedGetObject(
-      BUCKET_NAME,
-      objectKey,
-      60 * 60
-    );
-    return url;
+    // Return direct public URL since bucket is configured for public download
+    const publicUrl = `${config.minio.serverUrl || `http://localhost:${config.minio.port}`}/${BUCKET_NAME}/${objectKey}`;
+    return publicUrl;
   } catch (error) {
-    console.error('Error generating presigned URL:', error);
+    console.error('Error generating public URL:', error);
     throw error;
   }
 }
