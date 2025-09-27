@@ -27,7 +27,8 @@ export async function createRoute(req, res) {
 
   const route = new routeModel({
     name: routeName,
-    points: points
+    points: points,
+    userId: req.user._id
   });
 
   await route.save();
@@ -189,9 +190,17 @@ export async function getRouteById(req, res) {
 
 // List all routes
 export async function getAllRoutes(req, res) {
-  const routes = await routeModel.find({}, {
+  const query = {};
+
+  // If user is authenticated, show their routes, otherwise show all public routes
+  if (req.user) {
+    query.userId = req.user._id;
+  }
+
+  const routes = await routeModel.find(query, {
     name: 1,
     droneId: 1,
+    userId: 1,
     status: 1,
     totalPoints: 1,
     pointsWithPhotos: 1,

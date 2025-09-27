@@ -29,6 +29,11 @@ const pointSchema = new Schema({
 const routeSchema = new Schema({
   name: { type: String, required: true },
   droneId: { type: ObjectId, ref: 'Drone' },
+  userId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
   totalPoints: { type: Number, default: 0 },

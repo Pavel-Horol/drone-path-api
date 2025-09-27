@@ -12,6 +12,7 @@ import {
   getRouteById,
   getAllRoutes
 } from '../controllers/route.controller.js';
+import AuthMiddleware from '../middleware/auth.js';
 
 const router = autoWrapRoutes(Router());
 
@@ -25,19 +26,27 @@ const upload = multer({
   }
 });
 
-// POST /routes - Create new route with CSV and photos
-router.post('/', upload.fields([
-  { name: 'csv', maxCount: 1 },
-  { name: 'photos', maxCount: 1000 }
-]), validateCreateRoute, createRoute);
-
-// POST /routes/:id/photos - Upload missing photos for existing route
-router.post('/:id/photos', upload.array('photos', 1000), validateUploadRoutePhotos, uploadRoutePhotos);
-
-// GET /routes/:id - Get route data for mapping
+// Public routes (can be accessed with or without authentication)
+router.get('/', AuthMiddleware.optionalAuth, getAllRoutes);
 router.get('/:id', validateGetRouteById, getRouteById);
 
-// GET /routes - List all routes
-router.get('/', getAllRoutes);
+// Protected routes (require authentication)
+router.post('/',
+  AuthMiddleware.authenticate,
+  upload.fields([
+    { name: 'csv', maxCount: 1 },
+    { name: 'photos', maxCount: 1000 }
+  ]),
+  validateCreateRoute,
+  createRoute
+);
+
+router.post('/:id/photos',
+  AuthMiddleware.authenticate,
+  AuthMiddleware.checkOwnership('route'),
+  upload.array('photos', 1000),
+  validateUploadRoutePhotos,
+  uploadRoutePhotos
+);
 
 export default router;

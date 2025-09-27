@@ -23,6 +23,11 @@ const droneSchema = new Schema({
     default: 0,
     min: 0
   }, // in minutes
+  userId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
   createdAt: {
     type: Date,
     default: Date.now

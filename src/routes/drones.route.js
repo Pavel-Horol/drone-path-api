@@ -15,25 +15,39 @@ import {
   deleteDrone,
   assignDroneToRoute
 } from '../controllers/drone.controller.js';
+import AuthMiddleware from '../middleware/auth.js';
 
 const router = autoWrapRoutes(Router());
 
-// POST /drones - Create new drone
-router.post('/', validateCreateDrone, createDrone);
-
-// GET /drones - List all drones
-router.get('/', getAllDrones);
-
-// GET /drones/:id - Get specific drone details
+// Public routes (can be accessed with or without authentication)
+router.get('/', AuthMiddleware.optionalAuth, getAllDrones);
 router.get('/:id', validateGetDroneById, getDroneById);
 
-// PUT /drones/:id - Update drone info
-router.put('/:id', validateUpdateDrone, updateDrone);
+// Protected routes (require authentication)
+router.post('/',
+  AuthMiddleware.authenticate,
+  validateCreateDrone,
+  createDrone
+);
 
-// DELETE /drones/:id - Delete drone
-router.delete('/:id', validateDeleteDrone, deleteDrone);
+router.put('/:id',
+  AuthMiddleware.authenticate,
+  AuthMiddleware.checkOwnership('drone'),
+  validateUpdateDrone,
+  updateDrone
+);
 
-// POST /drones/:droneId/assign-route/:routeId - Assign drone to route
-router.post('/:droneId/assign-route/:routeId', validateAssignDroneToRoute, assignDroneToRoute);
+router.delete('/:id',
+  AuthMiddleware.authenticate,
+  AuthMiddleware.checkOwnership('drone'),
+  validateDeleteDrone,
+  deleteDrone
+);
+
+router.post('/:droneId/assign-route/:routeId',
+  AuthMiddleware.authenticate,
+  validateAssignDroneToRoute,
+  assignDroneToRoute
+);
 
 export default router;

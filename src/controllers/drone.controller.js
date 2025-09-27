@@ -6,12 +6,12 @@ import { createError } from '../utils/appError.js';
 export async function createDrone(req, res) {
   const { model, serialNumber, currentBatteryCharge, totalFlightTime } = req.body;
 
-
   const drone = await Drone.create({
     model,
     serialNumber,
     currentBatteryCharge: currentBatteryCharge || 100,
-    totalFlightTime: totalFlightTime || 0
+    totalFlightTime: totalFlightTime || 0,
+    userId: req.user._id
   });
 
   res.status(201).json({
@@ -26,11 +26,19 @@ export async function createDrone(req, res) {
 
 // List all drones
 export async function getAllDrones(req, res) {
-  const drones = await Drone.find({}, {
+  const query = {};
+
+  // If user is authenticated, show their drones, otherwise show all public drones
+  if (req.user) {
+    query.userId = req.user._id;
+  }
+
+  const drones = await Drone.find(query, {
     model: 1,
     serialNumber: 1,
     currentBatteryCharge: 1,
     totalFlightTime: 1,
+    userId: 1,
     createdAt: 1,
     updatedAt: 1
   }).sort({ createdAt: -1 });
