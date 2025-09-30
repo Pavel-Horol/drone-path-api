@@ -1,0 +1,47 @@
+@startuml Activity Diagram - Route Creation Process
+start
+
+:User initiates route creation;
+:Validate user authentication;
+
+if (User authenticated?) then (yes)
+    :Parse route data (name, points);
+    :Validate route data;
+
+    if (Data valid?) then (yes)
+        :Create Route document in DB;
+        :Set status to 'processing';
+        :Initialize photo counters;
+
+        :Process each route point;
+        if (Point has photo?) then (yes)
+            :Upload photo to MinIO;
+            :Generate photo URL;
+            :Update point with photoUrl;
+            :Increment photos counter;
+        else (no)
+            :Skip photo upload;
+        endif
+
+        :Update route counters;
+        :Determine route status;
+
+        if (All points have photos?) then (yes)
+            :Set status to 'complete';
+        elseif (Some points have photos?) then (yes)
+            :Set status to 'partial';
+        else (no)
+            :Keep status 'processing';
+        endif
+
+        :Save updated route to DB;
+        :Return success response;
+    else (no)
+        :Return validation error;
+    endif
+else (no)
+    :Return authentication error;
+endif
+
+stop
+@enduml

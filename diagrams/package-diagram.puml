@@ -1,0 +1,76 @@
+@startuml Package Diagram
+package src {
+    package controllers {
+        [auth.controller.js]
+        [drone.controller.js]
+        [route.controller.js]
+    }
+
+    package models {
+        [user.model.js]
+        [drone.model.js]
+        [route.model.js]
+    }
+
+    package routes {
+        [auth.route.js]
+        [drones.route.js]
+        [routes.route.js]
+        [index.js]
+    }
+
+    package services {
+        [minio.service.js]
+        [scv.service.js]
+    }
+
+    package middleware {
+        [auth.js]
+        [errorHandler.js]
+        [metrics.js]
+        [validation.js]
+        [autoWrapRoutes.js]
+    }
+
+    package config {
+        [db.config.js]
+        [monitoring.config.js]
+        [index.js]
+    }
+
+    package utils {
+        [appError.js]
+    }
+
+    [app.js]
+    [server.js]
+}
+
+package observability {
+    package grafana {
+        package dashboards {
+            [nodejs_app_overview.json]
+        }
+        package provisioning {
+            package dashboards {
+                [dashboards.yml]
+            }
+            package datasources {
+                [datasource.yml]
+            }
+        }
+    }
+
+    package prometheus {
+        [prometheus.yml]
+    }
+}
+
+package routes {
+    [generate-api-docs.js]
+}
+
+[package.json]
+[docker-compose.yml]
+[dockerfile]
+@enduml

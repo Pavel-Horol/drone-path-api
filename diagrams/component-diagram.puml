@@ -1,0 +1,66 @@
+@startuml Component Diagram
+package "Controllers" {
+  [AuthController] as AuthCtrl
+  [DroneController] as DroneCtrl
+  [RouteController] as RouteCtrl
+}
+
+package "Models" {
+  [User Model] as UserModel
+  [Drone Model] as DroneModel
+  [Route Model] as RouteModel
+}
+
+package "Services" {
+  [MinIO Service] as MinIO
+  [SCV Service] as SCV
+}
+
+package "Middleware" {
+  [Auth Middleware] as AuthMW
+  [Error Handler] as ErrorMW
+  [Metrics Middleware] as MetricsMW
+  [Validation Middleware] as ValidationMW
+}
+
+package "Routes" {
+  [Auth Routes] as AuthRoutes
+  [Drone Routes] as DroneRoutes
+  [Route Routes] as RouteRoutes
+  [Index Routes] as IndexRoutes
+}
+
+package "Config" {
+  [Database Config] as DBConfig
+  [Monitoring Config] as MonitoringConfig
+  [Index Config] as IndexConfig
+}
+
+package "Utils" {
+  [App Error] as AppError
+}
+
+[Express App] --> AuthCtrl
+[Express App] --> DroneCtrl
+[Express App] --> RouteCtrl
+
+AuthCtrl --> UserModel
+DroneCtrl --> DroneModel
+RouteCtrl --> RouteModel
+RouteCtrl --> MinIO
+
+AuthRoutes --> AuthCtrl
+DroneRoutes --> DroneCtrl
+RouteRoutes --> RouteCtrl
+IndexRoutes --> AuthRoutes
+IndexRoutes --> DroneRoutes
+IndexRoutes --> RouteRoutes
+
+AuthMW --> AuthCtrl
+ErrorMW --> [Express App]
+MetricsMW --> [Express App]
+ValidationMW --> [Express App]
+
+DBConfig --> [Database]
+MonitoringConfig --> [Prometheus]
+@enduml

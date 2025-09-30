@@ -1,0 +1,27 @@
+@startuml State Diagram - Route Status
+[*] --> processing : Route created
+
+processing --> processing : Photo upload in progress
+processing --> partial : Some photos uploaded\n(pointsWithPhotos > 0 && < totalPoints)
+processing --> complete : All photos uploaded\n(pointsWithPhotos == totalPoints)
+
+partial --> partial : More photos uploaded
+partial --> complete : All photos uploaded\n(pointsWithPhotos == totalPoints)
+
+complete --> [*] : Route completed
+
+note right of processing
+    Initial status when route is created
+    No photos uploaded yet
+end note
+
+note right of partial
+    Some points have photos
+    Route is partially processed
+end note
+
+note right of complete
+    All points have photos
+    Route processing finished
+end note
+@enduml

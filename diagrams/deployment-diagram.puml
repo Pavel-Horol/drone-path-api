@@ -1,0 +1,61 @@
+@startuml Deployment Diagram
+node "Docker Host" as Docker {
+    rectangle "Node.js App Container" as App {
+        artifact "drone-path-api" as API
+    }
+
+    rectangle "MongoDB Container" as MongoDB {
+        database "MongoDB" as DB
+    }
+
+    rectangle "MinIO Container" as MinIO {
+        storage "MinIO S3 Storage" as Storage
+    }
+
+    rectangle "Prometheus Container" as Prometheus {
+        artifact "Prometheus" as Metrics
+    }
+
+    rectangle "Grafana Container" as Grafana {
+        artifact "Grafana" as Dashboard
+    }
+}
+
+node "External Services" as External {
+    cloud "Client Applications" as Client
+}
+
+Client --> API : HTTP/HTTPS
+API --> DB : MongoDB queries
+API --> Storage : S3 operations
+API --> Metrics : Push metrics
+Dashboard --> Metrics : Pull metrics
+
+note right of App
+    Express.js server
+    Port: configurable
+    Health check: /health
+    Metrics: /metrics
+end note
+
+note right of MongoDB
+    Stores: Users, Drones, Routes
+    Authentication: enabled
+end note
+
+note right of MinIO
+    Bucket: drone-photos
+    Stores route point photos
+    Public access for downloads
+end note
+
+note right of Prometheus
+    Scrapes metrics from API
+    Stores time-series data
+end note
+
+note right of Grafana
+    Visualizes metrics
+    Custom dashboards
+end note
+@enduml

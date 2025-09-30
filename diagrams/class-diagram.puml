@@ -1,0 +1,52 @@
+@startuml Class Diagram
+class User {
+  +username: String
+  +password: String (hashed)
+  +createdAt: Date
+  +updatedAt: Date
+  --
+  +validatePassword(password: String): Boolean
+  +toJSON(): Object
+}
+
+class Drone {
+  +model: String
+  +serialNumber: String
+  +currentBatteryCharge: Number
+  +totalFlightTime: Number
+  +userId: ObjectId
+  +createdAt: Date
+  +updatedAt: Date
+}
+
+class Route {
+  +name: String
+  +droneId: ObjectId
+  +userId: ObjectId
+  +createdAt: Date
+  +updatedAt: Date
+  +totalPoints: Number
+  +pointsWithPhotos: Number
+  +status: String
+  --
+  +points: Point[]
+}
+
+class Point {
+  +fileName: String
+  +date: String
+  +time: String
+  +latitude: String
+  +longitude: String
+  +altitude: String
+  +speed: String
+  +course: String
+  +photoUrl: String
+  +hasPhoto: Boolean
+}
+
+User ||--o{ Drone : owns
+User ||--o{ Route : owns
+Drone ||--o{ Route : flies
+Route *-- Point : contains
+@enduml

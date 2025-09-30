@@ -1,0 +1,32 @@
+@startuml Sequence Diagram - Route Creation
+actor User
+participant "Client App" as Client
+participant "Auth MW" as Auth
+participant "Route Controller" as Controller
+participant "Route Model" as RouteModel
+participant "MinIO Service" as MinIO
+participant "Database" as DB
+
+User -> Client: Create route with points & photos
+Client -> Auth: POST /api/routes (with JWT)
+Auth -> Auth: Validate JWT token
+Auth -> Controller: Proceed to createRoute
+
+Controller -> Controller: Validate request data
+Controller -> RouteModel: new Route({...})
+RouteModel -> DB: Save route (status: processing)
+
+Controller -> MinIO: Upload photos for each point
+loop for each point with photo
+    Controller -> MinIO: uploadPhoto(routeId, fileName, buffer)
+    MinIO -> MinIO: Store photo in bucket
+    MinIO --> Controller: Return object key
+    Controller -> RouteModel: Update point with photoUrl
+end
+
+Controller -> RouteModel: Update route status
+RouteModel -> DB: Save updated route
+
+Controller --> Client: Return created route data
+Client --> User: Display success message
+@enduml

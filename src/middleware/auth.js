@@ -63,7 +63,7 @@ class AuthMiddleware {
   }
 
   static checkOwnership(model) {
-    return async (req, res, next) => {
+    return async(req, res, next) => {
       try {
         const resourceId = req.params.id;
         const userId = req.user._id.toString();
