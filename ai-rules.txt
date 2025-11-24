@@ -1,0 +1,51 @@
+Если возникли проблемы с реализацией, используй этот чеклист:
+
+ВСЕГДА используй только NuxtUI компоненты:
+
+UButton, UInput, UTextarea, USelect, USelectMenu
+UCard, UModal, USlideover, UPopover
+UTable, UForm, UFormGroup
+UAlert, UBadge, UTooltip
+USkeleton, UProgress, USpinner
+
+
+НЕ создавай backend в Nuxt:
+
+НЕ создавай файлы в server/api
+Используй proxy в nuxt.config.ts для API
+Все запросы через composables/useApi.ts
+
+
+Для работы с файлами:
+
+FormData для загрузки
+Отображение прогресса через onUploadProgress
+Валидация на клиенте перед отправкой
+
+
+Для TIF файлов обязательно:
+
+Установи geotiff библиотеку
+Конвертируй в canvas для отображения
+Предусмотри fallback для неподдерживаемых браузеров
+
+
+Оптимизация карты:
+
+Используй marker clustering для больших данных
+Lazy loading для маркеров вне viewport
+Debounce для обновления при движении карты
+
+
+State management через Pinia:
+
+Отдельный store для каждой сущности
+Композиция stores при необходимости
+Persist state для критичных данных
+
+
+Типизация TypeScript:
+
+Строгая типизация всех данных
+Интерфейсы для API responses
+Type guards для runtime проверок
