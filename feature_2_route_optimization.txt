@@ -1,0 +1,730 @@
+============================================================================
+ФИЧА 2: ADVANCED ROUTE OPTIMIZATION ENGINE
+============================================================================
+
+ОПИСАНИЕ ФУНКЦИИ
+================
+
+Интеллектуальная система оптимизации маршрутов с использованием AI/ML алгоритмов. Учитывает множественные факторы: погодные условия, препятствия, no-fly зоны, энергоэффективность, безопасность полетов и координацию между несколькими дронами для создания оптимальных траекторий полета.
+
+ОСНОВНЫЕ КОМПОНЕНТЫ
+==================
+
+1. AI Route Planning Engine с машинным обучением
+2. Weather & Environmental Data Integration
+3. Multi-drone Coordination System
+4. Dynamic Re-routing Service
+5. Route Templates & Optimization Profiles
+6. Cost Analysis & Efficiency Calculator
+7. Airspace Management Integration
+8. Predictive Route Analytics
+
+ТЕХНИЧЕСКИЕ ТРЕБОВАНИЯ
+======================
+
+Backend:
+- Python микросервис с ML библиотеками (scikit-learn, TensorFlow)
+- Graph algorithms (NetworkX, OR-Tools от Google)
+- Weather API интеграция (OpenWeatherMap, AccuWeather)
+- Airspace data integration (ICAO standards)
+- Redis для кэширования оптимизаций
+- Node.js интеграция через REST API
+
+External APIs:
+- OpenWeatherMap для погодных данных
+- Airspace APIs для no-fly zones
+- Terrain elevation APIs (USGS, Google)
+- Traffic management APIs
+
+ДЕТАЛЬНЫЙ ПЛАН РЕАЛИЗАЦИИ
+=========================
+
+ЭТАП 1: Python Optimization Microservice (4-5 дней)
+--------------------------------------------------
+
+1.1. Структура проекта:
+```
+optimization-service/
+├── app/
+│   ├── __init__.py
+│   ├── main.py                      # FastAPI application
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── route_optimizer.py      # Основной оптимизатор
+│   │   ├── constraint_solver.py    # Solver ограничений  
+│   │   ├── multi_drone_coordinator.py # Координация дронов
+│   │   ├── cost_calculator.py      # Расчет стоимости
+│   │   └── weather_predictor.py    # Погодные предсказания
+│   ├── algorithms/
+│   │   ├── __init__.py
+│   │   ├── dijkstra.py            # Алгоритм Дейкстры
+│   │   ├── a_star.py              # A* алгоритм
+│   │   ├── genetic_algorithm.py    # Генетический алгоритм
+│   │   ├── simulated_annealing.py  # Имитация отжига
+│   │   ├── ant_colony.py          # Муравьиный алгоритм
+│   │   └── ml_optimizer.py        # ML-based оптимизация
+│   ├── data_sources/
+│   │   ├── __init__.py
+│   │   ├── weather_client.py       # Клиент погодных данных
+│   │   ├── airspace_client.py      # Клиент airspace данных
+│   │   ├── terrain_client.py       # Клиент terrain данных
+│   │   └── traffic_client.py       # Клиент traffic данных
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── routes.py              # API endpoints
+│   │   └── schemas.py             # Pydantic schemas
+│   └── utils/
+│       ├── __init__.py
+│       ├── geospatial.py          # Геопространственные утилиты
+│       └── performance.py         # Метрики производительности
+├── tests/
+│   ├── test_optimizer.py
+│   ├── test_algorithms.py
+│   └── test_api.py
+├── requirements.txt
+├── Dockerfile
+└── docker-compose.yml
+```
+
+1.2. FastAPI Application:
+```python
+# app/main.py
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Dict, Optional
+import uvicorn
+from .models.route_optimizer import RouteOptimizer
+from .models.multi_drone_coordinator import MultiDroneCoordinator
+from .api.schemas import OptimizationRequest, OptimizationResponse
+
+app = FastAPI(
+    title="Drone Route Optimization Service",
+    description="AI-powered route optimization for drones",
+    version="1.0.0"
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize services
+route_optimizer = RouteOptimizer()
+multi_drone_coordinator = MultiDroneCoordinator()
+
+@app.post("/api/v1/optimize", response_model=OptimizationResponse)
+async def optimize_route(request: OptimizationRequest):
+    """
+    Оптимизирует маршрут для одного дрона
+    """
+    try:
+        result = await route_optimizer.optimize_route(request)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/multi-drone-optimize")
+async def optimize_multi_drone(requests: List[OptimizationRequest]):
+    """
+    Оптимизирует маршруты для нескольких дронов с координацией
+    """
+    try:
+        result = await multi_drone_coordinator.optimize_fleet_routes(requests)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/dynamic-reoptimize")
+async def dynamic_reoptimize(
+    route_id: str,
+    current_position: Dict,
+    new_conditions: Dict
+):
+    """
+    Динамическое перепланирование маршрута в реальном времени
+    """
+    try:
+        result = await route_optimizer.dynamic_reoptimize(
+            route_id, current_position, new_conditions
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/optimization-profiles")
+async def get_optimization_profiles():
+    """
+    Возвращает доступные профили оптимизации
+    """
+    return {
+        "profiles": [
+            {
+                "id": "fastest",
+                "name": "Fastest Route",
+                "description": "Минимизирует время полета",
+                "priority": ["time", "distance", "energy"]
+            },
+            {
+                "id": "energy_efficient",
+                "name": "Energy Efficient",
+                "description": "Минимизирует расход энергии",
+                "priority": ["energy", "distance", "time"]
+            },
+            {
+                "id": "safest",
+                "name": "Safest Route",
+                "description": "Максимизирует безопасность",
+                "priority": ["safety", "weather", "airspace"]
+            },
+            {
+                "id": "balanced",
+                "name": "Balanced",
+                "description": "Сбалансированная оптимизация",
+                "priority": ["time", "energy", "safety"]
+            }
+        ]
+    }
+
+@app.get("/api/v1/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "optimization"}
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+1.3. Pydantic Schemas:
+```python
+# app/api/schemas.py
+from pydantic import BaseModel, Field
+from typing import List, Dict, Optional
+from datetime import datetime
+
+class Waypoint(BaseModel):
+    latitude: float = Field(..., ge=-90, le=90)
+    longitude: float = Field(..., ge=-180, le=180)
+    altitude: float = Field(..., ge=0, le=500)
+    timestamp: Optional[datetime] = None
+    mandatory: bool = True
+    tolerance_radius: float = Field(default=5.0, ge=0)
+
+class DroneSpecs(BaseModel):
+    max_speed: float = Field(..., gt=0)  # m/s
+    max_altitude: float = Field(..., gt=0)  # meters
+    battery_capacity: float = Field(..., gt=0)  # Wh
+    weight: float = Field(..., gt=0)  # kg
+    wind_resistance: float = Field(default=0.8, ge=0, le=1)
+    energy_consumption_rate: float = Field(..., gt=0)  # W per m/s
+
+class Constraints(BaseModel):
+    max_altitude: float = Field(default=120, le=500)
+    avoid_populated_areas: bool = True
+    respect_no_fly_zones: bool = True
+    max_wind_speed: float = Field(default=15, ge=0)
+    min_visibility: float = Field(default=1000, ge=0)
+    max_slope: float = Field(default=30, ge=0, le=90)
+
+class OptimizationRequest(BaseModel):
+    start_point: Waypoint
+    end_point: Waypoint
+    waypoints: List[Waypoint] = []
+    drone_specs: DroneSpecs
+    optimization_profile: str = Field(
+        default="balanced",
+        pattern="^(fastest|energy_efficient|safest|balanced)$"
+    )
+    constraints: Optional[Constraints] = None
+    max_computation_time: float = Field(default=30.0, gt=0, le=300)
+
+class RouteMetrics(BaseModel):
+    total_distance_m: float
+    total_distance_km: float
+    estimated_flight_time_s: float
+    estimated_flight_time_min: float
+    estimated_energy_consumption_wh: float
+    estimated_battery_usage_percent: float
+    max_wind_speed_ms: float
+    safety_score: float
+    efficiency_score: float
+    weather_suitability: str
+
+class OptimizationResponse(BaseModel):
+    success: bool
+    route: List[Waypoint]
+    metrics: RouteMetrics
+    computation_time: float
+    algorithm_used: str
+    alternatives: List[Dict] = []
+    warnings: List[str] = []
+```
+
+1.4. Route Optimizer Implementation:
+```python
+# app/models/route_optimizer.py
+import numpy as np
+import networkx as nx
+from typing import List, Dict, Tuple, Optional
+from dataclasses import dataclass
+from geopy.distance import geodesic
+import asyncio
+import time
+from ..algorithms.a_star import AStarOptimizer
+from ..algorithms.genetic_algorithm import GeneticOptimizer
+from ..data_sources.weather_client import WeatherClient
+from ..data_sources.airspace_client import AirspaceClient
+
+class RouteOptimizer:
+    def __init__(self):
+        self.weather_client = WeatherClient()
+        self.airspace_client = AirspaceClient()
+        self.graph_cache = {}
+        
+    async def optimize_route(self, request: OptimizationRequest) -> Dict:
+        """
+        Главный метод оптимизации маршрута
+        """
+        start_time = time.time()
+        
+        try:
+            # 1. Валидация входных данных
+            self._validate_request(request)
+            
+            # 2. Создание графа пространства
+            flight_graph = await self._create_flight_graph(request)
+            
+            # 3. Получение внешних данных
+            weather_data = await self.weather_client.get_weather_data(
+                self._get_route_bounds(request)
+            )
+            airspace_data = await self.airspace_client.get_restrictions(
+                self._get_route_bounds(request)
+            )
+            
+            # 4. Выбор алгоритма оптимизации
+            algorithm = self._select_optimization_algorithm(request)
+            
+            # 5. Запуск оптимизации
+            optimized_route = await algorithm.optimize(
+                flight_graph, 
+                weather_data, 
+                airspace_data,
+                request
+            )
+            
+            # 6. Постобработка и валидация результата
+            final_route = await self._postprocess_route(optimized_route, request)
+            
+            # 7. Расчет метрик
+            metrics = await self._calculate_route_metrics(final_route, request)
+            
+            # 8. Генерация альтернатив
+            alternatives = await self._generate_alternatives(request, final_route)
+            
+            computation_time = time.time() - start_time
+            
+            return {
+                'success': True,
+                'route': final_route,
+                'metrics': metrics,
+                'computation_time': computation_time,
+                'algorithm_used': algorithm.__class__.__name__,
+                'alternatives': alternatives,
+                'warnings': self._generate_warnings(final_route, weather_data, airspace_data)
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'computation_time': time.time() - start_time
+            }
+
+    def _validate_request(self, request: OptimizationRequest):
+        """Валидация запроса оптимизации"""
+        # Проверка расстояния между точками
+        start = (request.start_point.latitude, request.start_point.longitude)
+        end = (request.end_point.latitude, request.end_point.longitude)
+        distance = geodesic(start, end).meters
+        
+        if distance < 10:
+            raise ValueError("Start and end points are too close (< 10m)")
+        
+        if distance > 50000:  # 50km
+            raise ValueError("Route distance exceeds maximum (50km)")
+        
+        # Проверка высоты
+        if request.start_point.altitude > request.constraints.max_altitude:
+            raise ValueError(f"Start altitude exceeds maximum ({request.constraints.max_altitude}m)")
+
+    async def _create_flight_graph(self, request: OptimizationRequest) -> nx.Graph:
+        """
+        Создает граф возможных траекторий полета
+        """
+        graph = nx.Graph()
+        
+        # Создаем сетку точек в области полета
+        bounds = self._get_route_bounds(request)
+        grid_points = self._generate_grid_points(bounds, resolution=50)  # 50m resolution
+        
+        # Добавляем обязательные точки
+        mandatory_points = [request.start_point] + request.waypoints + [request.end_point]
+        all_points = mandatory_points + grid_points
+        
+        # Добавляем узлы в граф
+        for i, point in enumerate(all_points):
+            graph.add_node(i, 
+                          lat=point.latitude, 
+                          lon=point.longitude, 
+                          alt=point.altitude,
+                          mandatory=getattr(point, 'mandatory', False))
+        
+        # Добавляем ребра между близкими точками
+        for i, point1 in enumerate(all_points):
+            for j, point2 in enumerate(all_points[i+1:], i+1):
+                distance = geodesic(
+                    (point1.latitude, point1.longitude),
+                    (point2.latitude, point2.longitude)
+                ).meters
+                
+                # Ограничиваем максимальное расстояние между точками
+                if distance < 500:  # 500m max
+                    altitude_diff = abs(point2.altitude - point1.altitude)
+                    
+                    # Добавляем ребро с весом = расстояние
+                    graph.add_edge(i, j, 
+                                  distance=distance,
+                                  altitude_diff=altitude_diff,
+                                  weight=distance)
+        
+        return graph
+
+    def _generate_grid_points(self, bounds: Dict, resolution: int = 50) -> List:
+        """
+        Генерирует сетку точек для графа
+        """
+        points = []
+        
+        lat_step = resolution / 111000  # примерно 111км на градус широты
+        lon_step = resolution / (111000 * np.cos(np.radians(bounds['center_lat'])))
+        
+        lat = bounds['min_lat']
+        while lat <= bounds['max_lat']:
+            lon = bounds['min_lon']
+            while lon <= bounds['max_lon']:
+                # Добавляем точки на разных высотах
+                for alt in [30, 60, 90]:  # 3 уровня высоты
+                    points.append(type('Waypoint', (), {
+                        'latitude': lat,
+                        'longitude': lon,
+                        'altitude': alt,
+                        'mandatory': False
+                    })())
+                lon += lon_step
+            lat += lat_step
+        
+        return points
+
+    def _select_optimization_algorithm(self, request: OptimizationRequest):
+        """
+        Выбирает подходящий алгоритм на основе параметров запроса
+        """
+        profile = request.optimization_profile
+        waypoint_count = len(request.waypoints)
+        
+        if waypoint_count < 5:
+            # Для простых маршрутов используем A*
+            from ..algorithms.a_star import AStarOptimizer
+            return AStarOptimizer(self._create_heuristic(profile))
+            
+        elif waypoint_count < 20:
+            # Для средних маршрутов используем генетический алгоритм
+            from ..algorithms.genetic_algorithm import GeneticOptimizer
+            return GeneticOptimizer(population_size=100, generations=50)
+            
+        else:
+            # Для сложных маршрутов используем симуляцию отжига
+            from ..algorithms.simulated_annealing import SimulatedAnnealingOptimizer
+            return SimulatedAnnealingOptimizer(initial_temp=1000, cooling_rate=0.95)
+
+    def _create_heuristic(self, profile: str):
+        """
+        Создает эвристическую функцию для оптимизации
+        """
+        def heuristic(node1, node2, weather_data, drone_specs):
+            # Базовое расстояние
+            distance = geodesic(
+                (node1['lat'], node1['lon']),
+                (node2['lat'], node2['lon'])
+            ).meters
+            
+            cost = distance
+            
+            if profile == 'fastest':
+                # Минимизируем время
+                wind_speed = self._get_wind_at_point(node1, weather_data)
+                effective_speed = drone_specs.max_speed - wind_speed * 0.3
+                cost = distance / max(effective_speed, 1)
+                
+            elif profile == 'energy_efficient':
+                # Минимизируем расход энергии
+                altitude_diff = abs(node2['alt'] - node1['alt'])
+                wind_factor = self._get_wind_factor(node1, weather_data)
+                cost = distance * (1 + wind_factor) + altitude_diff * 0.5
+                
+            elif profile == 'safest':
+                # Максимизируем безопасность
+                safety_factor = self._calculate_safety_factor(node1, node2, weather_data)
+                cost = distance * safety_factor
+                
+            elif profile == 'balanced':
+                # Сбалансированная оптимизация
+                time_cost = distance / drone_specs.max_speed
+                energy_cost = self._estimate_energy_cost(node1, node2, drone_specs, weather_data)
+                safety_cost = self._calculate_safety_factor(node1, node2, weather_data)
+                
+                # Взвешенная сумма
+                cost = (time_cost * 0.3 + energy_cost * 0.4 + safety_cost * 0.3)
+            
+            return cost
+            
+        return heuristic
+
+    async def _calculate_route_metrics(self, route: List, request: OptimizationRequest) -> Dict:
+        """
+        Рассчитывает метрики для оптимизированного маршрута
+        """
+        total_distance = 0
+        total_time = 0
+        total_energy = 0
+        max_wind_speed = 0
+        safety_score = 100
+        
+        for i in range(len(route) - 1):
+            current = route[i]
+            next_point = route[i + 1]
+            
+            # Расчет расстояния
+            segment_distance = geodesic(
+                (current.latitude, current.longitude),
+                (next_point.latitude, next_point.longitude)
+            ).meters
+            total_distance += segment_distance
+            
+            # Расчет времени с учетом ветра
+            wind_effect = await self._calculate_wind_effect(current, next_point)
+            effective_speed = request.drone_specs.max_speed * (1 - wind_effect)
+            segment_time = segment_distance / max(effective_speed, 1)
+            total_time += segment_time
+            
+            # Расчет энергозатрат
+            altitude_diff = abs(next_point.altitude - current.altitude)
+            energy_for_distance = segment_distance * request.drone_specs.energy_consumption_rate / request.drone_specs.max_speed
+            energy_for_altitude = altitude_diff * 10  # Simplified
+            total_energy += energy_for_distance + energy_for_altitude
+            
+            # Анализ безопасности
+            segment_safety = await self._analyze_segment_safety(current, next_point)
+            safety_score = min(safety_score, segment_safety)
+        
+        return {
+            'total_distance_m': round(total_distance, 2),
+            'total_distance_km': round(total_distance / 1000, 2),
+            'estimated_flight_time_s': round(total_time, 2),
+            'estimated_flight_time_min': round(total_time / 60, 2),
+            'estimated_energy_consumption_wh': round(total_energy, 2),
+            'estimated_battery_usage_percent': round((total_energy / request.drone_specs.battery_capacity) * 100, 2),
+            'max_wind_speed_ms': round(max_wind_speed, 2),
+            'safety_score': round(safety_score, 2),
+            'efficiency_score': self._calculate_efficiency_score(total_distance, total_time, total_energy),
+            'weather_suitability': 'good'  # Simplified
+        }
+
+    def _get_route_bounds(self, request: OptimizationRequest) -> Dict:
+        """Вычисляет границы области маршрута"""
+        all_points = [request.start_point] + request.waypoints + [request.end_point]
+        
+        lats = [p.latitude for p in all_points]
+        lons = [p.longitude for p in all_points]
+        
+        # Добавляем буфер 10%
+        lat_range = max(lats) - min(lats)
+        lon_range = max(lons) - min(lons)
+        
+        return {
+            'min_lat': min(lats) - lat_range * 0.1,
+            'max_lat': max(lats) + lat_range * 0.1,
+            'min_lon': min(lons) - lon_range * 0.1,
+            'max_lon': max(lons) + lon_range * 0.1,
+            'center_lat': sum(lats) / len(lats),
+            'center_lon': sum(lons) / len(lons)
+        }
+
+    async def _generate_alternatives(self, request: OptimizationRequest, main_route: List) -> List[Dict]:
+        """Генерирует альтернативные маршруты"""
+        alternatives = []
+        
+        # Генерируем 2-3 альтернативных маршрута с разными профилями
+        profiles = ['fastest', 'energy_efficient', 'safest']
+        
+        for profile in profiles:
+            if profile != request.optimization_profile:
+                alt_request = request.copy()
+                alt_request.optimization_profile = profile
+                
+                try:
+                    alt_result = await self.optimize_route(alt_request)
+                    if alt_result['success']:
+                        alternatives.append({
+                            'profile': profile,
+                            'metrics': alt_result['metrics'],
+                            'route_preview': alt_result['route'][:5]  # Первые 5 точек
+                        })
+                except:
+                    pass
+        
+        return alternatives
+
+    def _generate_warnings(self, route: List, weather_data: Dict, airspace_data: Dict) -> List[str]:
+        """Генерирует предупреждения о маршруте"""
+        warnings = []
+        
+        # Проверка погодных условий
+        if weather_data.get('wind_speed', 0) > 10:
+            warnings.append(f"High wind speed detected: {weather_data['wind_speed']} m/s")
+        
+        # Проверка no-fly зон
+        if airspace_data.get('no_fly_zones'):
+            warnings.append("Route passes near restricted airspace")
+        
+        return warnings
+
+    def _calculate_efficiency_score(self, distance: float, time: float, energy: float) -> float:
+        """Рассчитывает общий score эффективности"""
+        # Нормализуем метрики и вычисляем score
+        distance_score = max(0, 100 - (distance / 100))  # Чем меньше, тем лучше
+        time_score = max(0, 100 - (time / 10))
+        energy_score = max(0, 100 - (energy / 50))
+        
+        return round((distance_score + time_score + energy_score) / 3, 2)
+
+    async def _postprocess_route(self, route: List, request: OptimizationRequest) -> List:
+        """Постобработка маршрута"""
+        # Сглаживание траектории
+        smoothed_route = self._smooth_route(route)
+        
+        # Добавление промежуточных точек если нужно
+        detailed_route = self._add_intermediate_points(smoothed_route)
+        
+        return detailed_route
+
+    def _smooth_route(self, route: List) -> List:
+        """Сглаживание маршрута для плавных поворотов"""
+        if len(route) < 3:
+            return route
+        
+        # Простое сглаживание методом скользящего среднего
+        smoothed = [route[0]]  # Начальная точка остается
+        
+        for i in range(1, len(route) - 1):
+            prev = route[i - 1]
+            curr = route[i]
+            next_p = route[i + 1]
+            
+            # Усредняем координаты
+            smooth_lat = (prev.latitude + curr.latitude + next_p.latitude) / 3
+            smooth_lon = (prev.longitude + curr.longitude + next_p.longitude) / 3
+            smooth_alt = (prev.altitude + curr.altitude + next_p.altitude) / 3
+            
+            smoothed.append(type('Waypoint', (), {
+                'latitude': smooth_lat,
+                'longitude': smooth_lon,
+                'altitude': smooth_alt
+            })())
+        
+        smoothed.append(route[-1])  # Конечная точка остается
+        return smoothed
+
+    def _add_intermediate_points(self, route: List, max_segment_length: float = 100) -> List:
+        """Добавляет промежуточные точки для длинных сегментов"""
+        detailed_route = [route[0]]
+        
+        for i in range(len(route) - 1):
+            current = route[i]
+            next_point = route[i + 1]
+            
+            distance = geodesic(
+                (current.latitude, current.longitude),
+                (next_point.latitude, next_point.longitude)
+            ).meters
+            
+            if distance > max_segment_length:
+                # Добавляем промежуточные точки
+                num_points = int(distance / max_segment_length)
+                
+                for j in range(1, num_points + 1):
+                    ratio = j / (num_points + 1)
+                    
+                    inter_lat = current.latitude + (next_point.latitude - current.latitude) * ratio
+                    inter_lon = current.longitude + (next_point.longitude - current.longitude) * ratio
+                    inter_alt = current.altitude + (next_point.altitude - current.altitude) * ratio
+                    
+                    detailed_route.append(type('Waypoint', (), {
+                        'latitude': inter_lat,
+                        'longitude': inter_lon,
+                        'altitude': inter_alt
+                    })())
+            
+            detailed_route.append(next_point)
+        
+        return detailed_route
+
+    async def _calculate_wind_effect(self, point1, point2) -> float:
+        """Рассчитывает влияние ветра на сегмент"""
+        # Упрощенный расчет
+        return 0.1  # 10% снижение скорости
+
+    async def _analyze_segment_safety(self, point1, point2) -> float:
+        """Анализирует безопасность сегмента"""
+        # Упрощенный расчет
+        return 95.0  # 95% безопасности
+
+    def _get_wind_at_point(self, node, weather_data) -> float:
+        """Получает скорость ветра в точке"""
+        return weather_data.get('wind_speed', 0)
+
+    def _get_wind_factor(self, node, weather_data) -> float:
+        """Рассчитывает фактор влияния ветра"""
+        wind_speed = self._get_wind_at_point(node, weather_data)
+        return wind_speed / 15  # Нормализация
+
+    def _calculate_safety_factor(self, node1, node2, weather_data) -> float:
+        """Рассчитывает фактор безопасности"""
+        base_safety = 1.0
+        
+        # Учитываем погоду
+        wind_speed = weather_data.get('wind_speed', 0)
+        if wind_speed > 10:
+            base_safety *= 1.5
+        
+        # Учитываем высоту
+        avg_altitude = (node1['alt'] + node2['alt']) / 2
+        if avg_altitude > 100:
+            base_safety *= 1.2
+        
+        return base_safety
+
+    def _estimate_energy_cost(self, node1, node2, drone_specs, weather_data) -> float:
+        """Оценивает энергозатраты для сегмента"""
+        distance = geodesic(
+            (node1['lat'], node1['lon']),
+            (node2['lat'], node2['lon'])
+        ).meters
+        
+        altitude_diff = abs(node2['alt'] - node1['alt'])
+        wind_factor = self._get_wind_factor(node1, weather_data)

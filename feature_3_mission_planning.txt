@@ -1,0 +1,898 @@
+============================================================================
+ФИЧА 3: MISSION PLANNING & AUTOMATION SYSTEM
+============================================================================
+
+ОПИСАНИЕ ФУНКЦИИ
+================
+
+Комплексная система планирования и автоматизации миссий для дронов с визуальным конструктором, системой планирования задач, автоматическим выполнением последовательностей действий и условной логикой для автономной работы. Позволяет создавать сложные миссии с drag-and-drop интерфейсом, автоматическим расписанием и условными правилами.
+
+ОСНОВНЫЕ КОМПОНЕНТЫ
+==================
+
+1. Visual Mission Builder (Drag & Drop Interface)
+2. Task Workflow Engine с поддержкой условной логики
+3. Automated Scheduling System с cron-like планированием
+4. Conditional Logic Engine (IF/THEN/ELSE правила)
+5. Mission Templates Library для стандартных операций
+6. Real-time Mission Monitoring и контроль
+7. Mission Analytics & Performance Tracking
+8. Simulation Engine для тестирования миссий
+
+ТЕХНИЧЕСКИЕ ТРЕБОВАНИЯ
+======================
+
+Backend:
+- Workflow Engine (Temporal.io или собственный)
+- Rule Engine для условной логики
+- Cron-like scheduler (node-cron)
+- State Machine для отслеживания статуса миссий
+- WebSocket для real-time обновлений
+- MongoDB для хранения миссий и шаблонов
+
+Frontend:
+- React Flow/Vue Flow для visual editor
+- Canvas API для custom mission builder
+- Real-time dashboard для мониторинга
+- Drag & Drop библиотеки
+
+ДЕТАЛЬНЫЙ ПЛАН РЕАЛИЗАЦИИ
+=========================
+
+ЭТАП 1: Модели данных и базовая архитектура (3 дня)
+--------------------------------------------------
+
+1.1. Модель Mission:
+```javascript
+// src/models/mission.model.js
+import { Schema, model } from 'mongoose';
+
+const actionSchema = new Schema({
+  type: {
+    type: String,
+    enum: [
+      'takeoff', 'land', 'goto', 'hover', 'capture_photo', 
+      'start_video', 'stop_video', 'set_speed', 'set_altitude', 
+      'wait', 'return_home', 'charge', 'patrol', 'scan_area', 
+      'follow_route', 'emergency_land', 'orbit', 'waypoint_mission'
+    ],
+    required: true
+  },
+  parameters: {
+    type: Map,
+    of: Schema.Types.Mixed
+  },
+  duration: Number, // в секундах
+  position: {
+    x: Number,
+    y: Number
+  }, // позиция в visual editor
+  conditions: {
+    before: [conditionSchema], // условия выполнения
+    after: [conditionSchema]   // условия завершения
+  },
+  timeout: Number, // максимальное время выполнения
+  retryPolicy: {
+    maxRetries: { type: Number, default: 0 },
+    retryDelay: { type: Number, default: 5000 } // ms
+  }
+}, { _id: true });
+
+const conditionSchema = new Schema({
+  type: {
+    type: String,
+    enum: [
+      'battery_level', 'weather_condition', 'time', 'sensor_reading', 
+      'altitude', 'speed', 'distance_to_target', 'mission_status',
+      'gps_accuracy', 'signal_strength', 'custom_variable'
+    ],
+    required: true
+  },
+  operator: {
+    type: String,
+    enum: ['>', '<', '>=', '<=', '==', '!=', 'in', 'not_in'],
+    required: true
+  },
+  value: Schema.Types.Mixed,
+  logicalOperator: {
+    type: String,
+    enum: ['AND', 'OR', 'NOT'],
+    default: 'AND'
+  }
+});
+
+const missionSchema = new Schema({
+  name: { type: String, required: true },
+  description: String,
+  type: {
+    type: String,
+    enum: ['survey', 'delivery', 'patrol', 'inspection', 'emergency', 'custom'],
+    default: 'custom'
+  },
+  
+  // Назначение дрона
+  droneId: { type: Schema.Types.ObjectId, ref: 'Drone' },
+  
+  // Действия миссии
+  actions: [actionSchema],
+  
+  // Связи между действиями (граф выполнения)
+  connections: [{
+    from: Schema.Types.ObjectId,     // ID источника
+    to: Schema.Types.ObjectId,       // ID получателя  
+    condition: conditionSchema,      // условие перехода
+    priority: { type: Number, default: 0 }
+  }],
+  
+  // Расписание выполнения
+  schedule: {
+    type: {
+      type: String,
+      enum: ['immediate', 'scheduled', 'recurring'],
+      default: 'immediate'
+    },
+    startTime: Date,
+    endTime: Date,
+    recurrence: {
+      type: String,
+      enum: ['daily', 'weekly', 'monthly', 'custom']
+    },
+    cronExpression: String,
+    timezone: { type: String, default: 'UTC' }
+  },
+  
+  // Статус миссии
+  status: {
+    type: String,
+    enum: ['draft', 'scheduled', 'running', 'paused', 'completed', 'failed', 'cancelled'],
+    default: 'draft'
+  },
+  
+  // Выполнение
+  currentActionId: Schema.Types.ObjectId,
+  executionLog: [{
+    actionId: Schema.Types.ObjectId,
+    startTime: Date,
+    endTime: Date,
+    status: {
+      type: String,
+      enum: ['pending', 'running', 'completed', 'failed', 'skipped']
+    },
+    result: Schema.Types.Mixed,
+    error: String,
+    retryCount: { type: Number, default: 0 }
+  }],
+  
+  // Метрики
+  estimatedDuration: Number, // в минутах
+  actualDuration: Number,
+  estimatedBatteryUsage: Number, // %
+  actualBatteryUsage: Number,
+  
+  // Безопасность и ограничения
+  safetyChecks: {
+    checkWeather: { type: Boolean, default: true },
+    checkBattery: { type: Boolean, default: true },
+    checkAirspace: { type: Boolean, default: true },
+    minBatteryLevel: { type: Number, default: 20 },
+    maxWindSpeed: { type: Number, default: 15 }
+  },
+  
+  // Геозоны
+  geofence: {
+    enabled: { type: Boolean, default: false },
+    boundaries: {
+      type: {
+        type: String,
+        enum: ['Polygon', 'Circle'],
+        default: 'Polygon'
+      },
+      coordinates: [[Number]], // для Polygon
+      center: { lat: Number, lon: Number }, // для Circle
+      radius: Number // для Circle в метрах
+    },
+    action: {
+      type: String,
+      enum: ['warn', 'return', 'land', 'hover'],
+      default: 'warn'
+    }
+  },
+  
+  // Метаданные
+  createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+  
+  // Теги для поиска
+  tags: [String],
+  
+  // Приоритет
+  priority: {
+    type: String,
+    enum: ['low', 'normal', 'high', 'critical'],
+    default: 'normal'
+  }
+});
+
+// Индексы
+missionSchema.index({ droneId: 1, status: 1 });
+missionSchema.index({ createdBy: 1, createdAt: -1 });
+missionSchema.index({ status: 1, 'schedule.startTime': 1 });
+missionSchema.index({ tags: 1 });
+
+// Методы
+missionSchema.methods.canExecute = async function() {
+  // Проверка возможности выполнения миссии
+  if (this.status !== 'scheduled' && this.status !== 'draft') {
+    return { canExecute: false, reason: 'Mission is not in executable state' };
+  }
+  
+  if (!this.droneId) {
+    return { canExecute: false, reason: 'No drone assigned' };
+  }
+  
+  // Проверка дрона
+  const Drone = model('Drone');
+  const drone = await Drone.findById(this.droneId);
+  
+  if (!drone) {
+    return { canExecute: false, reason: 'Drone not found' };
+  }
+  
+  if (drone.currentBatteryCharge < this.safetyChecks.minBatteryLevel) {
+    return { canExecute: false, reason: `Battery too low: ${drone.currentBatteryCharge}%` };
+  }
+  
+  return { canExecute: true };
+};
+
+missionSchema.methods.estimateMetrics = function() {
+  // Оценка времени и расхода батареи
+  let totalTime = 0;
+  let totalBattery = 0;
+  
+  for (const action of this.actions) {
+    // Примерная оценка на основе типа действия
+    switch (action.type) {
+      case 'takeoff':
+        totalTime += 30; // 30 секунд
+        totalBattery += 5; // 5%
+        break;
+      case 'land':
+        totalTime += 30;
+        totalBattery += 3;
+        break;
+      case 'goto':
+        const distance = action.parameters.get('distance') || 100;
+        totalTime += distance / 10; // 10 m/s средняя скорость
+        totalBattery += distance / 100; // 1% на 100м
+        break;
+      case 'hover':
+        totalTime += action.duration || 10;
+        totalBattery += (action.duration || 10) / 60; // 1% в минуту
+        break;
+      case 'wait':
+        totalTime += action.duration || 5;
+        break;
+      default:
+        totalTime += 10;
+        totalBattery += 1;
+    }
+  }
+  
+  this.estimatedDuration = Math.ceil(totalTime / 60); // в минутах
+  this.estimatedBatteryUsage = Math.ceil(totalBattery);
+};
+
+export default model('Mission', missionSchema);
+```
+
+1.2. Модель Mission Template:
+```javascript
+// src/models/missionTemplate.model.js
+import { Schema, model } from 'mongoose';
+
+const missionTemplateSchema = new Schema({
+  name: { type: String, required: true },
+  description: String,
+  category: {
+    type: String,
+    enum: ['agriculture', 'security', 'mapping', 'delivery', 'inspection', 'rescue', 'other'],
+    default: 'other'
+  },
+  
+  // Шаблон действий
+  templateActions: [{
+    type: String,
+    parameters: Map,
+    duration: Number,
+    position: { x: Number, y: Number },
+    conditions: Schema.Types.Mixed
+  }],
+  
+  // Шаблон связей
+  templateConnections: [{
+    from: Schema.Types.ObjectId,
+    to: Schema.Types.ObjectId,
+    condition: Schema.Types.Mixed
+  }],
+  
+  // Параметры по умолчанию
+  defaultParameters: {
+    type: Map,
+    of: Schema.Types.Mixed
+  },
+  
+  // Требования к дрону
+  requiredDroneSpecs: {
+    minBatteryLife: Number,
+    minSpeed: Number,
+    requiredSensors: [String],
+    payloadRequirements: [String],
+    minFlightTime: Number
+  },
+  
+  // Метрики шаблона
+  estimatedDuration: Number,
+  estimatedBatteryUsage: Number,
+  difficulty: {
+    type: String,
+    enum: ['beginner', 'intermediate', 'advanced', 'expert'],
+    default: 'intermediate'
+  },
+  
+  // Статистика использования
+  useCount: { type: Number, default: 0 },
+  rating: { type: Number, min: 1, max: 5 },
+  reviews: [{
+    userId: { type: Schema.Types.ObjectId, ref: 'User' },
+    rating: Number,
+    comment: String,
+    createdAt: { type: Date, default: Date.now }
+  }],
+  
+  // Теги и категоризация
+  tags: [String],
+  
+  // Публичность
+  isPublic: { type: Boolean, default: false },
+  
+  // Автор
+  createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+missionTemplateSchema.index({ category: 1, isPublic: 1 });
+missionTemplateSchema.index({ tags: 1 });
+missionTemplateSchema.index({ rating: -1, useCount: -1 });
+
+export default model('MissionTemplate', missionTemplateSchema);
+```
+
+ЭТАП 2: Mission Execution Engine (4-5 дней)
+------------------------------------------
+
+2.1. Mission Executor:
+```javascript
+// src/services/missionExecutor.js
+import Mission from '../models/mission.model.js';
+import Drone from '../models/drone.model.js';
+import { EventEmitter } from 'events';
+
+class MissionExecutor extends EventEmitter {
+  constructor(io) {
+    super();
+    this.io = io; // Socket.IO instance
+    this.activeMissions = new Map();
+    this.droneConnections = new Map();
+    this.conditionEvaluator = new ConditionEvaluator();
+  }
+
+  async startMission(missionId) {
+    const mission = await Mission.findById(missionId)
+      .populate('droneId')
+      .populate('actions');
+    
+    if (!mission) {
+      throw new Error('Mission not found');
+    }
+
+    // Валидация миссии
+    const validation = await mission.canExecute();
+    if (!validation.canExecute) {
+      throw new Error(`Mission cannot be executed: ${validation.reason}`);
+    }
+
+    // Создание контекста выполнения
+    const executionContext = {
+      missionId: mission._id,
+      droneId: mission.droneId,
+      currentAction: null,
+      actionQueue: this.buildActionQueue(mission),
+      variables: new Map(),
+      startTime: new Date(),
+      status: 'running',
+      pauseRequested: false,
+      abortRequested: false
+    };
+
+    this.activeMissions.set(missionId, executionContext);
+
+    // Обновляем статус миссии
+    mission.status = 'running';
+    await mission.save();
+
+    // Уведомляем подписчиков
+    this.io.to(`mission:${missionId}`).emit('mission:started', {
+      missionId,
+      startTime: executionContext.startTime
+    });
+
+    // Начинаем выполнение
+    try {
+      await this.executeNextAction(executionContext);
+    } catch (error) {
+      await this.handleMissionError(missionId, error);
+    }
+
+    return executionContext;
+  }
+
+  async executeNextAction(context) {
+    // Проверка на паузу или отмену
+    if (context.pauseRequested) {
+      await this.pauseMission(context.missionId);
+      return;
+    }
+
+    if (context.abortRequested) {
+      await this.abortMission(context.missionId);
+      return;
+    }
+
+    // Проверка завершения миссии
+    if (context.actionQueue.length === 0) {
+      await this.completeMission(context);
+      return;
+    }
+
+    const nextAction = context.actionQueue.shift();
+    context.currentAction = nextAction;
+
+    // Логируем начало действия
+    await this.logActionStart(context.missionId, nextAction);
+
+    // Проверяем условия выполнения
+    if (nextAction.conditions && nextAction.conditions.before) {
+      const conditionsMet = await this.conditionEvaluator.evaluate(
+        nextAction.conditions.before,
+        context
+      );
+
+      if (!conditionsMet) {
+        // Условия не выполнены
+        await this.handleConditionNotMet(nextAction, context);
+        return;
+      }
+    }
+
+    // Выполняем действие
+    try {
+      const result = await this.executeAction(nextAction, context);
+      
+      await this.logActionCompletion(context.missionId, nextAction, 'completed', result);
+
+      // Проверяем условия завершения
+      if (nextAction.conditions && nextAction.conditions.after) {
+        await this.waitForConditions(nextAction.conditions.after, context);
+      }
+
+      // Уведомляем о завершении действия
+      this.io.to(`mission:${context.missionId}`).emit('mission:action_completed', {
+        missionId: context.missionId,
+        actionId: nextAction._id,
+        result
+      });
+
+      // Переходим к следующему действию
+      setTimeout(() => {
+        this.executeNextAction(context);
+      }, 100);
+
+    } catch (error) {
+      await this.handleActionError(nextAction, error, context);
+    }
+  }
+
+  async executeAction(action, context) {
+    const drone = await this.getDroneConnection(context.droneId);
+
+    switch (action.type) {
+      case 'takeoff':
+        return await drone.takeoff(action.parameters.get('altitude') || 10);
+
+      case 'land':
+        return await drone.land();
+
+      case 'goto':
+        return await drone.goToPosition(
+          action.parameters.get('latitude'),
+          action.parameters.get('longitude'),
+          action.parameters.get('altitude') || drone.currentAltitude
+        );
+
+      case 'hover':
+        return await drone.hover(action.parameters.get('duration') || 5);
+
+      case 'capture_photo':
+        const photo = await drone.capturePhoto();
+        await this.savePhoto(photo, context);
+        return { photoId: photo.id };
+
+      case 'start_video':
+        await drone.startVideoRecording();
+        context.variables.set('video_start_time', new Date());
+        return { recording: true };
+
+      case 'stop_video':
+        const video = await drone.stopVideoRecording();
+        await this.saveVideo(video, context);
+        return { videoId: video.id };
+
+      case 'wait':
+        await this.sleep(action.parameters.get('duration') * 1000);
+        return { waited: action.parameters.get('duration') };
+
+      case 'set_speed':
+        await drone.setSpeed(action.parameters.get('speed'));
+        return { speed: action.parameters.get('speed') };
+
+      case 'set_altitude':
+        await drone.setAltitude(action.parameters.get('altitude'));
+        return { altitude: action.parameters.get('altitude') };
+
+      case 'patrol':
+        return await this.executePatrol(action, context);
+
+      case 'scan_area':
+        return await this.executeScanArea(action, context);
+
+      case 'return_home':
+        return await drone.returnToHome();
+
+      case 'emergency_land':
+        return await drone.emergencyLand();
+
+      default:
+        throw new Error(`Unknown action type: ${action.type}`);
+    }
+  }
+
+  buildActionQueue(mission) {
+    // Строим очередь выполнения на основе connections
+    const queue = [];
+    const visited = new Set();
+
+    // Находим стартовое действие (без входящих связей)
+    const startAction = mission.actions.find(action => 
+      !mission.connections.some(conn => conn.to.equals(action._id))
+    );
+
+    if (startAction) {
+      this.buildQueueRecursive(startAction, mission, queue, visited);
+    } else {
+      // Если нет явного старта, выполняем последовательно
+      return mission.actions;
+    }
+
+    return queue;
+  }
+
+  buildQueueRecursive(action, mission, queue, visited) {
+    if (visited.has(action._id.toString())) return;
+
+    visited.add(action._id.toString());
+    queue.push(action);
+
+    // Находим следующие действия
+    const nextConnections = mission.connections
+      .filter(conn => conn.from.equals(action._id))
+      .sort((a, b) => (b.priority || 0) - (a.priority || 0));
+
+    for (const connection of nextConnections) {
+      const nextAction = mission.actions.find(a => 
+        a._id.equals(connection.to)
+      );
+
+      if (nextAction) {
+        // Добавляем условие перехода к действию
+        if (connection.condition) {
+          nextAction.transitionCondition = connection.condition;
+        }
+        this.buildQueueRecursive(nextAction, mission, queue, visited);
+      }
+    }
+  }
+
+  async pauseMission(missionId) {
+    const context = this.activeMissions.get(missionId);
+    if (!context) return;
+
+    context.status = 'paused';
+    context.pauseRequested = false;
+
+    const mission = await Mission.findById(missionId);
+    mission.status = 'paused';
+    await mission.save();
+
+    this.io.to(`mission:${missionId}`).emit('mission:paused', {
+      missionId,
+      pausedAt: new Date()
+    });
+  }
+
+  async resumeMission(missionId) {
+    const context = this.activeMissions.get(missionId);
+    if (!context || context.status !== 'paused') return;
+
+    context.status = 'running';
+
+    const mission = await Mission.findById(missionId);
+    mission.status = 'running';
+    await mission.save();
+
+    this.io.to(`mission:${missionId}`).emit('mission:resumed', {
+      missionId,
+      resumedAt: new Date()
+    });
+
+    // Продолжаем выполнение
+    await this.executeNextAction(context);
+  }
+
+  async abortMission(missionId) {
+    const context = this.activeMissions.get(missionId);
+    if (!context) return;
+
+    context.status = 'aborted';
+    context.abortRequested = false;
+
+    const mission = await Mission.findById(missionId);
+    mission.status = 'cancelled';
+    mission.actualDuration = (new Date() - context.startTime) / 1000 / 60;
+    await mission.save();
+
+    // Отправляем команду дрону вернуться домой
+    const drone = await this.getDroneConnection(context.droneId);
+    await drone.returnToHome();
+
+    this.activeMissions.delete(missionId);
+
+    this.io.to(`mission:${missionId}`).emit('mission:aborted', {
+      missionId,
+      abortedAt: new Date()
+    });
+  }
+
+  async completeMission(context) {
+    const mission = await Mission.findById(context.missionId);
+    mission.status = 'completed';
+    mission.actualDuration = (new Date() - context.startTime) / 1000 / 60;
+    
+    // Рассчитываем фактический расход батареи
+    const drone = await Drone.findById(context.droneId);
+    const batteryUsed = 100 - drone.currentBatteryCharge;
+    mission.actualBatteryUsage = batteryUsed;
+    
+    await mission.save();
+
+    this.activeMissions.delete(context.missionId);
+
+    this.io.to(`mission:${context.missionId}`).emit('mission:completed', {
+      missionId: context.missionId,
+      completedAt: new Date(),
+      duration: mission.actualDuration,
+      batteryUsed
+    });
+  }
+
+  async handleActionError(action, error, context) {
+    console.error(`Action ${action.type} failed:`, error);
+
+    // Проверяем retry policy
+    if (action.retryPolicy && action.retryPolicy.maxRetries > 0) {
+      const retryCount = context.variables.get(`retry_${action._id}`) || 0;
+      
+      if (retryCount < action.retryPolicy.maxRetries) {
+        // Повторяем действие
+        context.variables.set(`retry_${action._id}`, retryCount + 1);
+        
+        await this.sleep(action.retryPolicy.retryDelay);
+        
+        // Возвращаем действие в очередь
+        context.actionQueue.unshift(action);
+        
+        await this.executeNextAction(context);
+        return;
+      }
+    }
+
+    // Если retry не помог или не настроен, логируем ошибку
+    await this.logActionCompletion(context.missionId, action, 'failed', null, error.message);
+
+    // Уведомляем об ошибке
+    this.io.to(`mission:${context.missionId}`).emit('mission:action_failed', {
+      missionId: context.missionId,
+      actionId: action._id,
+      error: error.message
+    });
+
+    // Решаем, продолжать ли миссию
+    const shouldContinue = await this.decideContinueOnError(action, error, context);
+    
+    if (shouldContinue) {
+      await this.executeNextAction(context);
+    } else {
+      await this.abortMission(context.missionId);
+    }
+  }
+
+  async logActionStart(missionId, action) {
+    const mission = await Mission.findById(missionId);
+    mission.executionLog.push({
+      actionId: action._id,
+      startTime: new Date(),
+      status: 'running'
+    });
+    await mission.save();
+  }
+
+  async logActionCompletion(missionId, action, status, result = null, error = null) {
+    const mission = await Mission.findById(missionId);
+    const logEntry = mission.executionLog.find(
+      log => log.actionId.equals(action._id) && !log.endTime
+    );
+    
+    if (logEntry) {
+      logEntry.endTime = new Date();
+      logEntry.status = status;
+      logEntry.result = result;
+      logEntry.error = error;
+    }
+    
+    await mission.save();
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+class ConditionEvaluator {
+  async evaluate(conditions, context) {
+    if (!conditions || conditions.length === 0) return true;
+
+    const results = [];
+
+    for (const condition of conditions) {
+      const result = await this.evaluateCondition(condition, context);
+      results.push({
+        condition,
+        result,
+        operator: condition.logicalOperator || 'AND'
+      });
+    }
+
+    return this.combineResults(results);
+  }
+
+  async evaluateCondition(condition, context) {
+    const { type, operator, value } = condition;
+    let actualValue;
+
+    switch (type) {
+      case 'battery_level':
+        actualValue = await this.getDroneBattery(context.droneId);
+        break;
+
+      case 'weather_condition':
+        const weather = await this.getWeatherCondition(context.droneId);
+        actualValue = weather[condition.weatherParameter];
+        break;
+
+      case 'time':
+        actualValue = new Date();
+        break;
+
+      case 'altitude':
+        actualValue = await this.getDroneAltitude(context.droneId);
+        break;
+
+      case 'speed':
+        actualValue = await this.getDroneSpeed(context.droneId);
+        break;
+
+      case 'sensor_reading':
+        actualValue = await this.getSensorReading(
+          context.droneId,
+          condition.sensorType
+        );
+        break;
+
+      case 'mission_status':
+        actualValue = context.status;
+        break;
+
+      case 'custom_variable':
+        actualValue = context.variables.get(condition.variableName);
+        break;
+
+      default:
+        throw new Error(`Unknown condition type: ${type}`);
+    }
+
+    return this.compareValues(actualValue, operator, value);
+  }
+
+  compareValues(actual, operator, expected) {
+    switch (operator) {
+      case '>': return actual > expected;
+      case '<': return actual < expected;
+      case '>=': return actual >= expected;
+      case '<=': return actual <= expected;
+      case '==': return actual == expected;
+      case '!=': return actual != expected;
+      case 'in': return Array.isArray(expected) && expected.includes(actual);
+      case 'not_in': return Array.isArray(expected) && !expected.includes(actual);
+      default: throw new Error(`Unknown operator: ${operator}`);
+    }
+  }
+
+  combineResults(results) {
+    let finalResult = true;
+    let currentOperator = 'AND';
+
+    for (const { result, operator } of results) {
+      if (currentOperator === 'AND') {
+        finalResult = finalResult && result;
+      } else if (currentOperator === 'OR') {
+        finalResult = finalResult || result;
+      } else if (currentOperator === 'NOT') {
+        finalResult = finalResult && !result;
+      }
+
+      currentOperator = operator;
+    }
+
+    return finalResult;
+  }
+}
+
+export default MissionExecutor;
+```
+
+ЭТАП 3: Mission Scheduler (2-3 дня)
+----------------------------------
+
+3.1. Scheduler Implementation:
+```javascript
+// src/services/missionScheduler.js
+import cron from 'node-cron';
+import Mission from '../models/mission.model.js';
+import MissionExecutor from './missionExecutor.js';
+
+class MissionScheduler {
+  constructor(io) {
+    this.scheduledMissions = new Map();
+    this.cronJobs = new Map();
+    this.missionExecutor = new MissionExecutor(io);
+    this.initializeScheduler();
+  }
+
+  initializeScheduler() {
+    // Загружаем все запланированные миссии при старте
+    this.loadScheduledMissions();
+
+    // Проверяем миссии каждую минуту
+    cron.schedule('* *

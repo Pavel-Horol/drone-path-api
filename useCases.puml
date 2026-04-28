@@ -1,0 +1,55 @@
+@startuml
+left to right direction
+
+actor Guest
+actor "Authenticated User" as User
+
+' Authenticated User is a specialization of Guest
+Guest <|-- User
+
+package "Drone Route Management System" {
+
+  ' --- Authentication ---
+  usecase "Register" as UC1
+  usecase "Login" as UC2
+
+  ' --- User Profile ---
+  usecase "View Profile" as UC3
+
+  ' --- Drone Management ---
+  usecase "Create Drone" as UC4
+  usecase "Edit Drone" as UC5
+  usecase "Delete Drone" as UC6
+
+  ' --- Route Management ---
+  usecase "Upload Route (CSV + Photos)" as UC7
+  usecase "View Routes List" as UC8
+  usecase "View Route Details on Map" as UC9
+  usecase "Upload Missing Photos" as UC10
+  usecase "Assign Drone to Route" as UC11
+
+}
+
+' --- Guest associations ---
+Guest --> UC1
+Guest --> UC2
+
+' --- Authenticated User associations ---
+User --> UC3
+User --> UC4
+User --> UC5
+User --> UC6
+User --> UC7
+User --> UC8
+User --> UC9
+User --> UC10
+User --> UC11
+
+' --- Relationships between use cases ---
+' Upload Missing Photos extends the base upload flow (optional addition)
+UC10 .> UC7 : <<extend>>
+
+' Assign Drone to Route always includes the route upload flow
+UC11 .> UC7 : <<include>>
+
+@enduml

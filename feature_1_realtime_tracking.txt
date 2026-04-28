@@ -1,0 +1,1793 @@
+============================================================================
+ФИЧА 1: REAL-TIME DRONE TRACKING & FLEET MANAGEMENT DASHBOARD
+============================================================================
+
+ОПИСАНИЕ ФУНКЦИИ
+================
+
+Система отслеживания дронов в реальном времени с интерактивным дашбордом для управления флотом. Обеспечивает мониторинг всех активных дронов, их статус, телеметрию и местоположение в режиме реального времени с возможностью оперативного реагирования на критические ситуации.
+
+ОСНОВНЫЕ КОМПОНЕНТЫ
+==================
+
+1. WebSocket Server для real-time коммуникации
+2. Интерактивная карта с позициями дронов  
+3. Дашборд с телеметрией и статистикой
+4. Система алертов и уведомлений
+5. Fleet analytics модуль
+6. Live командная панель
+7. Геозоны и ограничения
+
+ТЕХНИЧЕСКИЕ ТРЕБОВАНИЯ
+======================
+
+Backend:
+- WebSocket сервер (socket.io)
+- Redis для кэширования состояний дронов
+- MongoDB для хранения исторических данных
+- Event-driven архитектура
+- Геопространственные индексы
+
+Frontend:
+- React/Vue.js дашборд
+- Leaflet/Mapbox для карт
+- Chart.js для графиков
+- Socket.io-client для real-time
+- WebRTC для видео стримов (опционально)
+
+ДЕТАЛЬНЫЙ ПЛАН РЕАЛИЗАЦИИ
+=========================
+
+ЭТАП 1: WebSocket Infrastructure Setup (2-3 дня)
+-----------------------------------------------
+
+1.1. Установка зависимостей:
+```bash
+npm install socket.io redis ioredis ws
+npm install mongoose-geojson-schema
+npm install geolib turf
+```
+
+1.2. Структура WebSocket сервера:
+```
+src/websocket/
+├── socketServer.js           # Основной WebSocket сервер
+├── events/
+│   ├── droneEvents.js       # События дронов
+│   ├── fleetEvents.js       # События флота
+│   └── alertEvents.js       # События алертов
+├── middleware/
+│   ├── socketAuth.js        # Аутентификация WebSocket
+│   └── rateLimiter.js       # Rate limiting для WebSocket
+├── handlers/
+│   ├── droneHandler.js      # Обработчики событий дронов
+│   ├── fleetHandler.js      # Обработчики событий флота
+│   └── commandHandler.js    # Обработчики команд
+└── utils/
+    ├── geolocation.js       # Утилиты геолокации
+    └── telemetryProcessor.js # Процессор телеметрии
+```
+
+1.3. WebSocket Server Implementation:
+```javascript
+// src/websocket/socketServer.js
+import { Server } from 'socket.io';
+import Redis from 'ioredis';
+import { authenticateSocket } from './middleware/socketAuth.js';
+import DroneHandler from './handlers/droneHandler.js';
+import FleetHandler from './handlers/fleetHandler.js';
+
+class WebSocketServer {
+  constructor(httpServer) {
+    this.io = new Server(httpServer, {
+      cors: {
+        origin: process.env.FRONTEND_URL || "http://localhost:3000",
+        credentials: true
+      },
+      path: '/api/ws'
+    });
+
+    this.redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: process.env.REDIS_PORT || 6379,
+      password: process.env.REDIS_PASSWORD
+    });
+
+    this.activeDrones = new Map();
+    this.userSessions = new Map();
+    
+    this.setupMiddleware();
+    this.setupEventHandlers();
+  }
+
+  setupMiddleware() {
+    this.io.use(authenticateSocket);
+    
+    this.io.use((socket, next) => {
+      // Rate limiting
+      const userId = socket.userId;
+      const now = Date.now();
+      const windowMs = 60000; // 1 minute
+      const maxRequests = 100;
+
+      // Implement rate limiting logic
+      next();
+    });
+  }
+
+  setupEventHandlers() {
+    this.io.on('connection', (socket) => {
+      console.log(`User ${socket.userId} connected`);
+      
+      // Store user session
+      this.userSessions.set(socket.userId, {
+        socketId: socket.id,
+        connectedAt: new Date(),
+        subscribedDrones: new Set()
+      });
+
+      // Join user to personal room
+      socket.join(`user:${socket.userId}`);
+
+      // Setup drone handlers
+      this.setupDroneHandlers(socket);
+      this.setupFleetHandlers(socket);
+      this.setupCommandHandlers(socket);
+
+      socket.on('disconnect', () => {
+        console.log(`User ${socket.userId} disconnected`);
+        this.userSessions.delete(socket.userId);
+      });
+    });
+  }
+
+  setupDroneHandlers(socket) {
+    // Subscribe to drone updates
+    socket.on('drone:subscribe', async (droneId) => {
+      const userSession = this.userSessions.get(socket.userId);
+      if (userSession) {
+        userSession.subscribedDrones.add(droneId);
+        socket.join(`drone:${droneId}`);
+        
+        // Send current drone state
+        const droneState = await this.getDroneState(droneId);
+        socket.emit('drone:state_update', droneState);
+      }
+    });
+
+    socket.on('drone:unsubscribe', (droneId) => {
+      const userSession = this.userSessions.get(socket.userId);
+      if (userSession) {
+        userSession.subscribedDrones.delete(droneId);
+        socket.leave(`drone:${droneId}`);
+      }
+    });
+
+    // Handle telemetry updates from drones
+    socket.on('drone:telemetry', async (data) => {
+      await this.processTelemetry(data, socket.userId);
+    });
+  }
+
+  setupFleetHandlers(socket) {
+    // Subscribe to fleet updates
+    socket.on('fleet:subscribe', () => {
+      socket.join('fleet:updates');
+      this.sendFleetOverview(socket);
+    });
+
+    socket.on('fleet:unsubscribe', () => {
+      socket.leave('fleet:updates');
+    });
+  }
+
+  setupCommandHandlers(socket) {
+    // Send command to drone
+    socket.on('drone:command', async (data) => {
+      const { droneId, command, parameters } = data;
+      await this.sendDroneCommand(droneId, command, parameters, socket.userId);
+    });
+
+    // Emergency stop
+    socket.on('drone:emergency_stop', async (droneId) => {
+      await this.emergencyStop(droneId, socket.userId);
+    });
+  }
+
+  async processTelemetry(telemetryData, userId) {
+    const { droneId, ...telemetry } = telemetryData;
+    
+    // Validate telemetry data
+    if (!this.validateTelemetry(telemetry)) {
+      return;
+    }
+
+    // Store in Redis for real-time access
+    await this.redis.setex(
+      `drone:${droneId}:telemetry`, 
+      300, // 5 minutes TTL
+      JSON.stringify({
+        ...telemetry,
+        timestamp: new Date(),
+        userId
+      })
+    );
+
+    // Update active drones map
+    this.activeDrones.set(droneId, {
+      ...telemetry,
+      lastUpdate: new Date(),
+      userId
+    });
+
+    // Check for alerts
+    const alerts = this.checkTelemetryAlerts(droneId, telemetry);
+    if (alerts.length > 0) {
+      await this.handleAlerts(droneId, alerts);
+    }
+
+    // Broadcast to subscribers
+    this.io.to(`drone:${droneId}`).emit('drone:telemetry_update', {
+      droneId,
+      telemetry,
+      timestamp: new Date()
+    });
+
+    // Update fleet statistics
+    await this.updateFleetStatistics();
+  }
+
+  checkTelemetryAlerts(droneId, telemetry) {
+    const alerts = [];
+
+    // Battery level alerts
+    if (telemetry.batteryLevel < 20) {
+      alerts.push({
+        type: 'battery_low',
+        severity: telemetry.batteryLevel < 10 ? 'critical' : 'warning',
+        message: `Battery level: ${telemetry.batteryLevel}%`,
+        droneId,
+        timestamp: new Date()
+      });
+    }
+
+    // Connection alerts
+    if (telemetry.signalStrength < 30) {
+      alerts.push({
+        type: 'signal_weak',
+        severity: 'warning',
+        message: `Weak signal: ${telemetry.signalStrength}%`,
+        droneId,
+        timestamp: new Date()
+      });
+    }
+
+    // Altitude alerts
+    if (telemetry.altitude > 120) { // Above legal limit
+      alerts.push({
+        type: 'altitude_violation',
+        severity: 'critical',
+        message: `Altitude violation: ${telemetry.altitude}m`,
+        droneId,
+        timestamp: new Date()
+      });
+    }
+
+    // Geofence alerts
+    if (this.isOutsideGeofence(telemetry.latitude, telemetry.longitude)) {
+      alerts.push({
+        type: 'geofence_violation',
+        severity: 'critical',
+        message: 'Drone outside allowed area',
+        droneId,
+        timestamp: new Date()
+      });
+    }
+
+    return alerts;
+  }
+
+  async handleAlerts(droneId, alerts) {
+    for (const alert of alerts) {
+      // Store alert in database
+      await this.storeAlert(alert);
+
+      // Send to all users monitoring this drone
+      this.io.to(`drone:${droneId}`).emit('drone:alert', alert);
+
+      // Send to fleet monitors
+      this.io.to('fleet:updates').emit('fleet:alert', alert);
+
+      // For critical alerts, send to all admin users
+      if (alert.severity === 'critical') {
+        this.io.emit('system:critical_alert', alert);
+      }
+    }
+  }
+
+  async sendFleetOverview(socket) {
+    const fleetData = {
+      totalDrones: this.activeDrones.size,
+      activeDrones: Array.from(this.activeDrones.values()).filter(
+        drone => Date.now() - drone.lastUpdate < 60000 // Active in last minute
+      ).length,
+      alerts: await this.getActiveAlerts(),
+      averageBattery: this.calculateAverageBattery(),
+      dronesOnMission: await this.getDronesOnMission()
+    };
+
+    socket.emit('fleet:overview', fleetData);
+  }
+
+  calculateAverageBattery() {
+    if (this.activeDrones.size === 0) return 0;
+    
+    const totalBattery = Array.from(this.activeDrones.values())
+      .reduce((sum, drone) => sum + (drone.batteryLevel || 0), 0);
+    
+    return Math.round(totalBattery / this.activeDrones.size);
+  }
+}
+
+export default WebSocketServer;
+```
+
+ЭТАП 2: Расширение моделей данных (2 дня)
+----------------------------------------
+
+2.1. Модель для live телеметрии:
+```javascript
+// src/models/liveTelemetry.model.js
+import { Schema, model } from 'mongoose';
+
+const liveTelemetrySchema = new Schema({
+  droneId: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'Drone', 
+    required: true,
+    index: true
+  },
+  timestamp: { 
+    type: Date, 
+    default: Date.now,
+    index: true
+  },
+  
+  // Позиция и движение
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: [Number] // [longitude, latitude]
+  },
+  altitude: { type: Number, required: true },
+  heading: { type: Number }, // 0-360 градусов
+  speed: { type: Number }, // м/с
+  verticalSpeed: { type: Number }, // м/с
+  
+  // Статус систем
+  batteryLevel: { type: Number, required: true }, // 0-100%
+  batteryVoltage: { type: Number },
+  batteryTemperature: { type: Number },
+  signalStrength: { type: Number }, // 0-100%
+  gpsAccuracy: { type: Number }, // метры
+  satelliteCount: { type: Number },
+  
+  // Состояние дрона
+  flightMode: {
+    type: String,
+    enum: ['manual', 'auto', 'rtl', 'loiter', 'land', 'takeoff'],
+    default: 'manual'
+  },
+  armed: { type: Boolean, default: false },
+  inAir: { type: Boolean, default: false },
+  
+  // Сенсоры
+  accelerometer: {
+    x: Number,
+    y: Number,
+    z: Number
+  },
+  gyroscope: {
+    x: Number,
+    y: Number,
+    z: Number
+  },
+  magnetometer: {
+    x: Number,
+    y: Number,
+    z: Number
+  },
+  barometer: { type: Number },
+  temperature: { type: Number },
+  humidity: { type: Number },
+  
+  // Камера и подвес
+  gimbal: {
+    pitch: Number,
+    roll: Number,
+    yaw: Number
+  },
+  camera: {
+    recording: Boolean,
+    photosTaken: Number,
+    storageUsed: Number, // MB
+    storageTotal: Number // MB
+  },
+  
+  // Состояние миссии
+  currentMission: {
+    type: Schema.Types.ObjectId,
+    ref: 'Mission'
+  },
+  currentWaypoint: { type: Number },
+  distanceToHome: { type: Number },
+  
+  // Предупреждения и ошибки
+  warnings: [String],
+  errors: [String]
+}, {
+  // Автоматическое создание геопространственного индекса
+  index: { location: '2dsphere' },
+  // TTL для автоматического удаления старых записей
+  expireAfterSeconds: 86400 // 24 часа
+});
+
+// Геопространственный индекс
+liveTelemetrySchema.index({ location: '2dsphere' });
+
+// Композитный индекс для эффективных запросов
+liveTelemetrySchema.index({ droneId: 1, timestamp: -1 });
+
+export default model('LiveTelemetry', liveTelemetrySchema);
+```
+
+2.2. Модель алертов:
+```javascript
+// src/models/alert.model.js
+import { Schema, model } from 'mongoose';
+
+const alertSchema = new Schema({
+  droneId: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'Drone', 
+    required: true 
+  },
+  userId: { 
+    type: Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: true 
+  },
+  
+  type: {
+    type: String,
+    enum: [
+      'battery_low', 'battery_critical',
+      'signal_weak', 'signal_lost',
+      'altitude_violation', 'geofence_violation',
+      'emergency_landing', 'system_error',
+      'mission_failed', 'weather_warning',
+      'maintenance_due', 'low_storage'
+    ],
+    required: true
+  },
+  
+  severity: {
+    type: String,
+    enum: ['info', 'warning', 'critical'],
+    default: 'info'
+  },
+  
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  
+  // Данные для контекста
+  telemetrySnapshot: { type: Schema.Types.Mixed },
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: [Number]
+  },
+  
+  // Статус обработки
+  status: {
+    type: String,
+    enum: ['active', 'acknowledged', 'resolved'],
+    default: 'active'
+  },
+  
+  acknowledgedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  acknowledgedAt: { type: Date },
+  resolvedAt: { type: Date },
+  
+  // Автоматические действия
+  autoActions: [{
+    action: String,
+    executed: Boolean,
+    executedAt: Date,
+    result: String
+  }],
+  
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+alertSchema.index({ droneId: 1, createdAt: -1 });
+alertSchema.index({ severity: 1, status: 1 });
+alertSchema.index({ type: 1, createdAt: -1 });
+
+export default model('Alert', alertSchema);
+```
+
+ЭТАП 3: Live Dashboard Frontend (4-5 дней)
+------------------------------------------
+
+3.1. Структура React компонентов:
+```
+frontend/src/components/LiveDashboard/
+├── LiveDashboard.jsx           # Основной дашборд
+├── FleetMap/
+│   ├── FleetMap.jsx           # Карта с дронами
+│   ├── DroneMarker.jsx        # Маркер дрона
+│   ├── DroneTrail.jsx         # Трек полета
+│   └── Geofences.jsx          # Геозоны
+├── FleetOverview/
+│   ├── FleetStats.jsx         # Статистика флота
+│   ├── DroneCard.jsx          # Карточка дрона
+│   └── StatusIndicators.jsx   # Индикаторы состояния
+├── DroneDetails/
+│   ├── DroneDetailPanel.jsx   # Детальная панель дрона
+│   ├── TelemetryCharts.jsx    # Графики телеметрии
+│   ├── BatteryIndicator.jsx   # Индикатор батареи
+│   └── VideoFeed.jsx          # Видео поток
+├── AlertsPanel/
+│   ├── AlertsPanel.jsx        # Панель алертов
+│   ├── AlertItem.jsx          # Элемент алерта
+│   └── AlertFilters.jsx       # Фильтры алертов
+└── Controls/
+    ├── DroneControls.jsx      # Управление дроном
+    ├── MissionControls.jsx    # Управление миссией
+    └── EmergencyControls.jsx  # Аварийное управление
+```
+
+3.2. Основной дашборд:
+```jsx
+// components/LiveDashboard/LiveDashboard.jsx
+import React, { useState, useEffect } from 'react';
+import { useWebSocket } from '../../hooks/useWebSocket';
+import FleetMap from './FleetMap/FleetMap';
+import FleetStats from './FleetOverview/FleetStats';
+import DroneDetailPanel from './DroneDetails/DroneDetailPanel';
+import AlertsPanel from './AlertsPanel/AlertsPanel';
+
+const LiveDashboard = () => {
+  const [selectedDrone, setSelectedDrone] = useState(null);
+  const [fleetData, setFleetData] = useState({});
+  const [alerts, setAlerts] = useState([]);
+  const [activeDrones, setActiveDrones] = useState(new Map());
+
+  const { socket, connected } = useWebSocket();
+
+  useEffect(() => {
+    if (!socket) return;
+
+    // Subscribe to fleet updates
+    socket.emit('fleet:subscribe');
+
+    // Fleet overview updates
+    socket.on('fleet:overview', (data) => {
+      setFleetData(data);
+    });
+
+    // Drone telemetry updates
+    socket.on('drone:telemetry_update', (data) => {
+      setActiveDrones(prev => {
+        const newMap = new Map(prev);
+        newMap.set(data.droneId, {
+          ...newMap.get(data.droneId),
+          ...data.telemetry,
+          lastUpdate: new Date()
+        });
+        return newMap;
+      });
+    });
+
+    // Alert updates
+    socket.on('drone:alert', (alert) => {
+      setAlerts(prev => [alert, ...prev].slice(0, 50)); // Keep last 50 alerts
+    });
+
+    // Fleet alerts
+    socket.on('fleet:alert', (alert) => {
+      setAlerts(prev => [alert, ...prev].slice(0, 50));
+    });
+
+    return () => {
+      socket.off('fleet:overview');
+      socket.off('drone:telemetry_update');
+      socket.off('drone:alert');
+      socket.off('fleet:alert');
+    };
+  }, [socket]);
+
+  const handleDroneSelect = (droneId) => {
+    setSelectedDrone(droneId);
+    if (socket && droneId) {
+      socket.emit('drone:subscribe', droneId);
+    }
+  };
+
+  const handleDroneDeselect = () => {
+    if (socket && selectedDrone) {
+      socket.emit('drone:unsubscribe', selectedDrone);
+    }
+    setSelectedDrone(null);
+  };
+
+  const handleEmergencyStop = (droneId) => {
+    if (socket) {
+      socket.emit('drone:emergency_stop', droneId);
+    }
+  };
+
+  return (
+    <div className="live-dashboard">
+      {/* Connection Status */}
+      <div className="connection-status">
+        <span className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
+          {connected ? '🟢 Connected' : '🔴 Disconnected'}
+        </span>
+      </div>
+
+      {/* Main Grid Layout */}
+      <div className="dashboard-grid">
+        {/* Fleet Statistics */}
+        <div className="fleet-stats-section">
+          <FleetStats 
+            fleetData={fleetData} 
+            activeDrones={activeDrones}
+            alerts={alerts.filter(a => a.status === 'active')}
+          />
+        </div>
+
+        {/* Fleet Map */}
+        <div className="map-section">
+          <FleetMap
+            drones={Array.from(activeDrones.values())}
+            selectedDrone={selectedDrone}
+            onDroneSelect={handleDroneSelect}
+            onDroneDeselect={handleDroneDeselect}
+          />
+        </div>
+
+        {/* Drone Details */}
+        {selectedDrone && (
+          <div className="drone-details-section">
+            <DroneDetailPanel
+              droneId={selectedDrone}
+              telemetry={activeDrones.get(selectedDrone)}
+              onEmergencyStop={handleEmergencyStop}
+              onClose={handleDroneDeselect}
+            />
+          </div>
+        )}
+
+        {/* Alerts Panel */}
+        <div className="alerts-section">
+          <AlertsPanel
+            alerts={alerts}
+            onAcknowledge={(alertId) => {
+              if (socket) {
+                socket.emit('alert:acknowledge', alertId);
+              }
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LiveDashboard;
+```
+
+3.3. Fleet Map компонент:
+```jsx
+// components/LiveDashboard/FleetMap/FleetMap.jsx
+import React, { useRef, useEffect } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import L from 'leaflet';
+import DroneMarker from './DroneMarker';
+import DroneTrail from './DroneTrail';
+
+const FleetMap = ({ drones, selectedDrone, onDroneSelect, onDroneDeselect }) => {
+  const mapRef = useRef();
+
+  // Create custom icons for different drone states
+  const createDroneIcon = (drone) => {
+    const color = getDroneColor(drone);
+    const size = selectedDrone === drone.id ? 35 : 25;
+    
+    return L.divIcon({
+      html: `
+        <div class="drone-marker" style="
+          width: ${size}px; 
+          height: ${size}px; 
+          background: ${color}; 
+          border-radius: 50%;
+          border: 2px solid white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        ">
+          🚁
+        </div>
+      `,
+      className: 'custom-drone-icon',
+      iconSize: [size, size],
+      iconAnchor: [size/2, size/2]
+    });
+  };
+
+  const getDroneColor = (drone) => {
+    if (!drone.inAir) return '#gray';
+    if (drone.batteryLevel < 20) return '#ff4444';
+    if (drone.batteryLevel < 50) return '#ff9800';
+    return '#4caf50';
+  };
+
+  const handleMapClick = () => {
+    if (selectedDrone) {
+      onDroneDeselect();
+    }
+  };
+
+  // Auto-fit map bounds to show all drones
+  useEffect(() => {
+    if (drones.length > 0 && mapRef.current) {
+      const bounds = L.latLngBounds(
+        drones.map(drone => [
+          drone.location?.coordinates[1], 
+          drone.location?.coordinates[0]
+        ]).filter(coord => coord[0] && coord[1])
+      );
+      
+      if (bounds.isValid()) {
+        mapRef.current.fitBounds(bounds, { padding: [20, 20] });
+      }
+    }
+  }, [drones]);
+
+  return (
+    <div className="fleet-map-container">
+      <div className="map-header">
+        <h3>Fleet Map</h3>
+        <div className="map-stats">
+          <span>{drones.filter(d => d.inAir).length} Flying</span>
+          <span>{drones.filter(d => !d.inAir).length} Landed</span>
+        </div>
+      </div>
+      
+      <MapContainer
+        ref={mapRef}
+        center={[50.4501, 30.5234]} // Default center (Kyiv)
+        zoom={10}
+        style={{ height: '500px', width: '100%' }}
+        onClick={handleMapClick}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+
+        {/* Drone Markers */}
+        {drones.map(drone => {
+          if (!drone.location?.coordinates) return null;
+          
+          const [lng, lat] = drone.location.coordinates;
+          
+          return (
+            <Marker
+              key={drone.id}
+              position={[lat, lng]}
+              icon={createDroneIcon(drone)}
+              eventHandlers={{
+                click: () => onDroneSelect(drone.id)
+              }}
+            >
+              <Popup>
+                <div className="drone-popup">
+                  <h4>{drone.name || `Drone ${drone.id}`}</h4>
+                  <div className="popup-stats">
+                    <div>Battery: {drone.batteryLevel}%</div>
+                    <div>Altitude: {drone.altitude}m</div>
+                    <div>Speed: {drone.speed}m/s</div>
+                    <div>Status: {drone.inAir ? 'Flying' : 'Landed'}</div>
+                  </div>
+                  <div className="popup-actions">
+                    <button 
+                      onClick={() => onDroneSelect(drone.id)}
+                      className="btn-primary"
+                    >
+                      View Details
+                    </button>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* Flight Trails */}
+        {drones.map(drone => (
+          drone.trail && drone.trail.length > 1 && (
+            <Polyline
+              key={`trail-${drone.id}`}
+              positions={drone.trail.map(point => [point.lat, point.lng])}
+              color={selectedDrone === drone.id ? '#2196f3' : '#666'}
+              weight={selectedDrone === drone.id ? 3 : 2}
+              opacity={0.7}
+            />
+          )
+        ))}
+      </MapContainer>
+    </div>
+  );
+};
+
+export default FleetMap;
+```
+
+ЭТАП 4: Real-time Analytics Engine (3 дня)
+------------------------------------------
+
+4.1. Analytics Service:
+```javascript
+// src/services/analytics/realTimeAnalytics.js
+import LiveTelemetry from '../../models/liveTelemetry.model.js';
+import Alert from '../../models/alert.model.js';
+import Redis from 'ioredis';
+
+class RealTimeAnalytics {
+  constructor() {
+    this.redis = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: process.env.REDIS_PORT || 6379
+    });
+    
+    this.metrics = new Map();
+    this.startPeriodicAnalysis();
+  }
+
+  async processTelemetryUpdate(droneId, telemetry) {
+    // Store in time-series for analytics
+    await this.storeTelemetryMetrics(droneId, telemetry);
+    
+    // Update real-time metrics
+    await this.updateRealtimeMetrics(droneId, telemetry);
+    
+    // Detect anomalies
+    const anomalies = await this.detectAnomalies(droneId, telemetry);
+    if (anomalies.length > 0) {
+      await this.handleAnomalies(droneId, anomalies);
+    }
+    
+    // Update fleet-wide statistics
+    await this.updateFleetStatistics();
+  }
+
+  async storeTelemetryMetrics(droneId, telemetry) {
+    const telemetryRecord = new LiveTelemetry({
+      droneId,
+      location: {
+        type: 'Point',
+        coordinates: [telemetry.longitude, telemetry.latitude]
+      },
+      altitude: telemetry.altitude,
+      heading: telemetry.heading,
+      speed: telemetry.speed,
+      batteryLevel: telemetry.batteryLevel,
+      batteryVoltage: telemetry.batteryVoltage,
+      signalStrength: telemetry.signalStrength,
+      flightMode: telemetry.flightMode,
+      armed: telemetry.armed,
+      inAir: telemetry.inAir,
+      timestamp: new Date()
+    });
+
+    await telemetryRecord.save();
+  }
+
+  async updateRealtimeMetrics(droneId, telemetry) {
+    const metrics = {
+      batteryDrainRate: await this.calculateBatteryDrainRate(droneId, telemetry.batteryLevel),
+      flightEfficiency: this.calculateFlightEfficiency(telemetry),
+      signalQuality: this.assessSignalQuality(telemetry.signalStrength),
+      stabilityScore: this.calculateStabilityScore(telemetry),
+      riskAssessment: await this.assessFlightRisk(droneId, telemetry)
+    };
+
+    // Store in Redis for real-time access
+    await this.redis.setex(
+      `metrics:${droneId}`,
+      300, // 5 minutes TTL
+      JSON.stringify(metrics)
+    );
+
+    this.metrics.set(droneId, metrics);
+  }
+
+  async calculateBatteryDrainRate(droneId, currentBattery) {
+    // Get battery history from last 5 minutes
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60000);
+    const batteryHistory = await LiveTelemetry
+      .find({
+        droneId,
+        timestamp: { $gte: fiveMinutesAgo }
+      })
+      .sort({ timestamp: 1 })
+      .select('batteryLevel timestamp');
+
+    if (batteryHistory.length < 2) return 0;
+
+    const first = batteryHistory[0];
+    const last = batteryHistory[batteryHistory.length - 1];
+    const timeDiff = (last.timestamp - first.timestamp) / 1000 / 60; // minutes
+    const batteryDiff = first.batteryLevel - last.batteryLevel;
+
+    return timeDiff > 0 ? batteryDiff / timeDiff : 0; // %/minute
+  }
+
+  calculateFlightEfficiency(telemetry) {
+    // Simple efficiency calculation based on speed and battery usage
+    const speedEfficiency = Math.min(telemetry.speed / 15, 1); // Optimal speed ~15 m/s
+    const batteryEfficiency = telemetry.batteryLevel / 100;
+    const signalEfficiency = telemetry.signalStrength / 100;
+
+    return (speedEfficiency + batteryEfficiency + signalEfficiency) / 3;
+  }
+
+  calculateStabilityScore(telemetry) {
+    let score = 100;
+
+    // Reduce score based on vibrations and erratic movements
+    if (telemetry.verticalSpeed && Math.abs(telemetry.verticalSpeed) > 5) {
+      score -= 20; // High vertical speed indicates instability
+    }
+
+    if (telemetry.accelerometer) {
+      const totalAccel = Math.sqrt(
+        telemetry.accelerometer.x ** 2 +
+        telemetry.accelerometer.y ** 2 +
+        telemetry.accelerometer.z ** 2
+      );
+      if (totalAccel > 15) score -= 30; // High acceleration
+    }
+
+    return Math.max(0, score);
+  }
+
+  async detectAnomalies(droneId, telemetry) {
+    const anomalies = [];
+
+    // Get historical baseline
+    const baseline = await this.getBaselineMetrics(droneId);
+    
+    // Battery anomaly detection
+    if (telemetry.batteryLevel < baseline.avgBatteryLevel - (2 * baseline.batteryStdDev)) {
+      anomalies.push({
+        type: 'battery_anomaly',
+        severity: 'warning',
+        description: 'Battery level significantly below normal',
+        value: telemetry.batteryLevel,
+        expected: baseline.avgBatteryLevel
+      });
+    }
+
+    // Speed anomaly detection
+    if (telemetry.speed > baseline.avgSpeed + (3 * baseline.speedStdDev)) {
+      anomalies.push({
+        type: 'speed_anomaly',
+        severity: 'warning',
+        description: 'Unusual speed detected',
+        value: telemetry.speed,
+        expected: baseline.avgSpeed
+      });
+    }
+
+    // Signal strength anomaly
+    if (telemetry.signalStrength < baseline.avgSignal - (2 * baseline.signalStdDev)) {
+      anomalies.push({
+        type: 'signal_anomaly',
+        severity: 'warning',
+        description: 'Signal strength below normal',
+        value: telemetry.signalStrength,
+        expected: baseline.avgSignal
+      });
+    }
+
+    return anomalies;
+  }
+
+  async getBaselineMetrics(droneId) {
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    
+    const pipeline = [
+      {
+        $match: {
+          droneId: droneId,
+          timestamp: { $gte: oneWeekAgo },
+          inAir: true // Only consider flight data
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          avgBatteryLevel: { $avg: '$batteryLevel' },
+          avgSpeed: { $avg: '$speed' },
+          avgSignal: { $avg: '$signalStrength' },
+          batteryLevels: { $push: '$batteryLevel' },
+          speeds: { $push: '$speed' },
+          signals: { $push: '$signalStrength' }
+        }
+      }
+    ];
+
+    const result = await LiveTelemetry.aggregate(pipeline);
+    if (!result.length) return this.getDefaultBaseline();
+
+    const data = result[0];
+    
+    return {
+      avgBatteryLevel: data.avgBatteryLevel,
+      avgSpeed: data.avgSpeed,
+      avgSignal: data.avgSignal,
+      batteryStdDev: this.calculateStandardDeviation(data.batteryLevels),
+      speedStdDev: this.calculateStandardDeviation(data.speeds),
+      signalStdDev: this.calculateStandardDeviation(data.signals)
+    };
+  }
+
+  calculateStandardDeviation(values) {
+    const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+    const variance = values.reduce((sum, val) => sum + (val - mean) ** 2, 0) / values.length;
+    return Math.sqrt(variance);
+  }
+
+  startPeriodicAnalysis() {
+    // Run fleet analysis every minute
+    setInterval(async () => {
+      await this.analyzeFleetPerformance();
+      await this.cleanupOldData();
+    }, 60000);
+  }
+
+  async analyzeFleetPerformance() {
+    const activeDrones = await this.getActiveDrones();
+    
+    const fleetMetrics = {
+      totalDrones: activeDrones.length,
+      averageBattery: this.calculateAverageBattery(activeDrones),
+      averageSignal: this.calculateAverageSignal(activeDrones),
+      dronesInAir: activeDrones.filter(d => d.inAir).length,
+      criticalBatteryCount: activeDrones.filter(d => d.batteryLevel < 20).length,
+      weakSignalCount: activeDrones.filter(d => d.signalStrength < 30).length,
+      timestamp: new Date()
+    };
+
+    // Store fleet metrics
+    await this.redis.setex(
+      'fleet:metrics',
+      300,
+      JSON.stringify(fleetMetrics)
+    );
+  }
+
+  async cleanupOldData() {
+    // Remove telemetry data older than 24 hours
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await LiveTelemetry.deleteMany({ timestamp: { $lt: oneDayAgo } });
+  }
+}
+
+export default RealTimeAnalytics;
+```
+
+ЭТАП 5: Alert System Implementation (2-3 дня)
+--------------------------------------------
+
+5.1. Alert Manager:
+```javascript
+// src/services/alertManager.js
+import Alert from '../models/alert.model.js';
+import nodemailer from 'nodemailer';
+
+class AlertManager {
+  constructor(io) {
+    this.io = io;
+    this.alertRules = new Map();
+    this.setupDefaultRules();
+    this.emailTransporter = this.setupEmailTransporter();
+  }
+
+  setupDefaultRules() {
+    // Battery alerts
+    this.alertRules.set('battery_low', {
+      condition: (telemetry) => telemetry.batteryLevel < 30,
+      severity: 'warning',
+      title: 'Low Battery',
+      autoActions: ['notify_operator'],
+      cooldown: 300000 // 5 minutes
+    });
+
+    this.alertRules.set('battery_critical', {
+      condition: (telemetry) => telemetry.batteryLevel < 15,
+      severity: 'critical',
+      title: 'Critical Battery Level',
+      autoActions: ['notify_operator', 'suggest_rtl'],
+      cooldown: 60000 // 1 minute
+    });
+
+    // Signal alerts
+    this.alertRules.set('signal_weak', {
+      condition: (telemetry) => telemetry.signalStrength < 30,
+      severity: 'warning',
+      title: 'Weak Signal',
+      autoActions: ['notify_operator'],
+      cooldown: 120000 // 2 minutes
+    });
+
+    // Altitude alerts
+    this.alertRules.set('altitude_violation', {
+      condition: (telemetry) => telemetry.altitude > 120, // Legal limit
+      severity: 'critical',
+      title: 'Altitude Violation',
+      autoActions: ['notify_operator', 'log_violation'],
+      cooldown: 30000 // 30 seconds
+    });
+  }
+
+  async processAlerts(droneId, telemetry) {
+    const triggeredAlerts = [];
+
+    for (const [alertType, rule] of this.alertRules) {
+      if (rule.condition(telemetry)) {
+        // Check cooldown
+        if (await this.isInCooldown(droneId, alertType, rule.cooldown)) {
+          continue;
+        }
+
+        const alert = await this.createAlert(droneId, alertType, rule, telemetry);
+        triggeredAlerts.push(alert);
+
+        // Execute auto actions
+        await this.executeAutoActions(alert, rule.autoActions);
+
+        // Update cooldown
+        await this.updateCooldown(droneId, alertType);
+      }
+    }
+
+    return triggeredAlerts;
+  }
+
+  async createAlert(droneId, type, rule, telemetry) {
+    const alert = new Alert({
+      droneId,
+      userId: telemetry.userId,
+      type,
+      severity: rule.severity,
+      title: rule.title,
+      message: this.generateMessage(type, rule, telemetry),
+      telemetrySnapshot: telemetry,
+      location: {
+        type: 'Point',
+        coordinates: [telemetry.longitude, telemetry.latitude]
+      }
+    });
+
+    await alert.save();
+
+    // Emit to WebSocket subscribers
+    this.io.to(`drone:${droneId}`).emit('drone:alert', alert);
+    this.io.to('fleet:updates').emit('fleet:alert', alert);
+
+    // Send critical alerts to all users
+    if (rule.severity === 'critical') {
+      this.io.emit('system:critical_alert', alert);
+    }
+
+    return alert;
+  }
+
+  generateMessage(type, rule, telemetry) {
+    switch (type) {
+      case 'battery_low':
+        return `Battery level is ${telemetry.batteryLevel}%. Consider returning to base.`;
+      case 'battery_critical':
+        return `Critical battery level: ${telemetry.batteryLevel}%. Immediate return to base recommended.`;
+      case 'signal_weak':
+        return `Signal strength is ${telemetry.signalStrength}%. Connection may be unstable.`;
+      case 'altitude_violation':
+        return `Drone altitude ${telemetry.altitude}m exceeds legal limit of 120m.`;
+      default:
+        return rule.title;
+    }
+  }
+
+  async executeAutoActions(alert, actions) {
+    for (const action of actions) {
+      try {
+        await this.executeAction(alert, action);
+        
+        // Log successful action
+        alert.autoActions.push({
+          action,
+          executed: true,
+          executedAt: new Date(),
+          result: 'success'
+        });
+      } catch (error) {
+        // Log failed action
+        alert.autoActions.push({
+          action,
+          executed: false,
+          executedAt: new Date(),
+          result: error.message
+        });
+      }
+    }
+
+    await alert.save();
+  }
+
+  async executeAction(alert, action) {
+    switch (action) {
+      case 'notify_operator':
+        await this.notifyOperator(alert);
+        break;
+        
+      case 'suggest_rtl':
+        await this.suggestReturnToLaunch(alert);
+        break;
+        
+      case 'log_violation':
+        await this.logViolation(alert);
+        break;
+        
+      case 'emergency_land':
+        await this.initiateEmergencyLanding(alert);
+        break;
+    }
+  }
+
+  async notifyOperator(alert) {
+    // Send email notification
+    if (this.emailTransporter) {
+      const mailOptions = {
+        from: process.env.ALERT_EMAIL_FROM,
+        to: process.env.OPERATOR_EMAIL,
+        subject: `Drone Alert: ${alert.title}`,
+        html: `
+          <h2>Drone Alert</h2>
+          <p><strong>Drone ID:</strong> ${alert.droneId}</p>
+          <p><strong>Alert Type:</strong> ${alert.type}</p>
+          <p><strong>Severity:</strong> ${alert.severity}</p>
+          <p><strong>Message:</strong> ${alert.message}</p>
+          <p><strong>Time:</strong> ${alert.createdAt}</p>
+          <p><strong>Location:</strong> ${alert.location.coordinates[1]}, ${alert.location.coordinates[0]}</p>
+        `
+      };
+
+      await this.emailTransporter.sendMail(mailOptions);
+    }
+
+    // Send SMS notification for critical alerts
+    if (alert.severity === 'critical') {
+      await this.sendSMSNotification(alert);
+    }
+  }
+
+  async isInCooldown(droneId, alertType, cooldownMs) {
+    const lastAlert = await Alert.findOne({
+      droneId,
+      type: alertType,
+      createdAt: { $gte: new Date(Date.now() - cooldownMs) }
+    }).sort({ createdAt: -1 });
+
+    return !!lastAlert;
+  }
+
+  async acknowledgeAlert(alertId, userId) {
+    const alert = await Alert.findByIdAndUpdate(
+      alertId,
+      {
+        status: 'acknowledged',
+        acknowledgedBy: userId,
+        acknowledgedAt: new Date()
+      },
+      { new: true }
+    );
+
+    if (alert) {
+      this.io.emit('alert:acknowledged', {
+        alertId,
+        acknowledgedBy: userId,
+        acknowledgedAt: new Date()
+      });
+    }
+
+    return alert;
+  }
+
+  async resolveAlert(alertId, userId) {
+    const alert = await Alert.findByIdAndUpdate(
+      alertId,
+      {
+        status: 'resolved',
+        resolvedAt: new Date()
+      },
+      { new: true }
+    );
+
+    if (alert) {
+      this.io.emit('alert:resolved', {
+        alertId,
+        resolvedAt: new Date()
+      });
+    }
+
+    return alert;
+  }
+
+  setupEmailTransporter() {
+    if (!process.env.SMTP_HOST) return null;
+
+    return nodemailer.createTransporter({
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT || 587,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    });
+  }
+}
+
+export default AlertManager;
+```
+
+ЭТАП 6: API Endpoints (1-2 дня)
+------------------------------
+
+6.1. Live Tracking API:
+```javascript
+// src/controllers/liveTracking.controller.js
+import LiveTelemetry from '../models/liveTelemetry.model.js';
+import Alert from '../models/alert.model.js';
+import Drone from '../models/drone.model.js';
+
+export const getLiveDrones = async (req, res) => {
+  const { userId } = req.user;
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60000);
+
+  // Get latest telemetry for user's drones
+  const latestTelemetry = await LiveTelemetry.aggregate([
+    {
+      $lookup: {
+        from: 'drones',
+        localField: 'droneId',
+        foreignField: '_id',
+        as: 'drone'
+      }
+    },
+    {
+      $match: {
+        'drone.userId': userId,
+        timestamp: { $gte: fiveMinutesAgo }
+      }
+    },
+    {
+      $sort: { droneId: 1, timestamp: -1 }
+    },
+    {
+      $group: {
+        _id: '$droneId',
+        latestTelemetry: { $first: '$$ROOT' },
+        drone: { $first: '$drone' }
+      }
+    }
+  ]);
+
+  res.json(latestTelemetry.map(item => ({
+    droneId: item._id,
+    drone: item.drone[0],
+    telemetry: item.latestTelemetry,
+    isOnline: new Date() - new Date(item.latestTelemetry.timestamp) < 60000
+  })));
+};
+
+export const getDroneTelemetryHistory = async (req, res) => {
+  const { droneId } = req.params;
+  const { timeframe = '1h' } = req.query;
+
+  const timeMap = {
+    '1h': 60 * 60 * 1000,
+    '24h': 24 * 60 * 60 * 1000,
+    '7d': 7 * 24 * 60 * 60 * 1000
+  };
+
+  const startTime = new Date(Date.now() - (timeMap[timeframe] || timeMap['1h']));
+
+  const telemetry = await LiveTelemetry
+    .find({
+      droneId,
+      timestamp: { $gte: startTime }
+    })
+    .sort({ timestamp: 1 })
+    .select('timestamp batteryLevel altitude speed signalStrength location');
+
+  res.json(telemetry);
+};
+
+export const getFleetStatistics = async (req, res) => {
+  const { userId } = req.user;
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60000);
+
+  // Get fleet overview
+  const pipeline = [
+    {
+      $lookup: {
+        from: 'drones',
+        localField: 'droneId',
+        foreignField: '_id',
+        as: 'drone'
+      }
+    },
+    {
+      $match: {
+        'drone.userId': userId,
+        timestamp: { $gte: fiveMinutesAgo }
+      }
+    },
+    {
+      $group: {
+        _id: null,
+        totalDrones: { $addToSet: '$droneId' },
+        averageBattery: { $avg: '$batteryLevel' },
+        averageSignal: { $avg: '$signalStrength' },
+        dronesInAir: {
+          $sum: {
+            $cond: [{ $eq: ['$inAir', true] }, 1, 0]
+          }
+        },
+        lowBatteryDrones: {
+          $sum: {
+            $cond: [{ $lt: ['$batteryLevel', 20] }, 1, 0]
+          }
+        }
+      }
+    }
+  ];
+
+  const stats = await LiveTelemetry.aggregate(pipeline);
+  const result = stats[0] || {
+    totalDrones: [],
+    averageBattery: 0,
+    averageSignal: 0,
+    dronesInAir: 0,
+    lowBatteryDrones: 0
+  };
+
+  // Get active alerts count
+  const activeAlerts = await Alert.countDocuments({
+    status: 'active',
+    droneId: { $in: await Drone.find({ userId }).distinct('_id') }
+  });
+
+  res.json({
+    totalDrones: result.totalDrones.length,
+    averageBattery: Math.round(result.averageBattery || 0),
+    averageSignal: Math.round(result.averageSignal || 0),
+    dronesInAir: result.dronesInAir,
+    lowBatteryDrones: result.lowBatteryDrones,
+    activeAlerts
+  });
+};
+
+export const getActiveAlerts = async (req, res) => {
+  const { userId } = req.user;
+  const { severity, limit = 50 } = req.query;
+
+  const query = {
+    status: 'active'
+  };
+
+  if (severity) {
+    query.severity = severity;
+  }
+
+  // Get alerts for user's drones
+  const userDrones = await Drone.find({ userId }).distinct('_id');
+  query.droneId = { $in: userDrones };
+
+  const alerts = await Alert
+    .find(query)
+    .populate('droneId', 'model serialNumber')
+    .sort({ createdAt: -1 })
+    .limit(parseInt(limit));
+
+  res.json(alerts);
+};
+
+export const acknowledgeAlert = async (req, res) => {
+  const { alertId } = req.params;
+  const { userId } = req.user;
+
+  const alert = await Alert.findByIdAndUpdate(
+    alertId,
+    {
+      status: 'acknowledged',
+      acknowledgedBy: userId,
+      acknowledgedAt: new Date()
+    },
+    { new: true }
+  );
+
+  if (!alert) {
+    return res.status(404).json({ message: 'Alert not found' });
+  }
+
+  res.json(alert);
+};
+
+export const sendDroneCommand = async (req, res) => {
+  const { droneId } = req.params;
+  const { command, parameters } = req.body;
+  const { userId } = req.user;
+
+  // Verify drone ownership
+  const drone = await Drone.findOne({ _id: droneId, userId });
+  if (!drone) {
+    return res.status(404).json({ message: 'Drone not found' });
+  }
+
+  // Send command via WebSocket
+  req.io.to(`drone:${droneId}`).emit('drone:command', {
+    command,
+    parameters,
+    timestamp: new Date(),
+    sentBy: userId
+  });
+
+  res.json({ message: 'Command sent successfully' });
+};
+```
+
+6.2. API Routes:
+```javascript
+// src/routes/liveTracking.route.js
+import { Router } from 'express';
+import {
+  getLiveDrones,
+  getDroneTelemetryHistory,
+  getFleetStatistics,
+  getActiveAlerts,
+  acknowledgeAlert,
+  sendDroneCommand
+} from '../controllers/liveTracking.controller.js';
+import AuthMiddleware from '../middleware/auth.js';
+import { autoWrapRoutes } from '../middleware/autoWrapRoutes.js';
+
+const router = autoWrapRoutes(Router());
+
+// All routes require authentication
+router.use(AuthMiddleware.authenticate);
+
+// Live tracking endpoints
+router.get('/drones/live', getLiveDrones);
+router.get('/drones/:droneId/telemetry', getDroneTelemetryHistory);
+router.get('/fleet/statistics', getFleetStatistics);
+
+// Alert management
+router.get('/alerts', getActiveAlerts);
+router.put('/alerts/:alertId/acknowledge', acknowledgeAlert);
+
+// Drone commands
+router.post('/drones/:droneId/command', sendDroneCommand);
+
+export default router;
+```
+
+ЭТАП 7: Testing & Performance (2 дня)
+------------------------------------
+
+7.1. WebSocket Testing:
+```javascript
+// tests/websocket.test.js
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import Client from 'socket.io-client';
+import WebSocketServer from '../src/websocket/socketServer.js';
+
+describe('WebSocket Server', () => {
+  let httpServer;
+  let wsServer;
+  let clientSocket;
+
+  beforeEach((done) => {
+    httpServer = createServer();
+    wsServer = new WebSocketServer(httpServer);
+    
+    httpServer.listen(() => {
+      const port = httpServer.address().port;
+      clientSocket = Client(`http://localhost:${port}/api/ws`, {
+        auth: { token: 'test-token' }
+      });
+      
+      clientSocket.on('connect', done);
+    });
+  });
+
+  afterEach(() => {
+    wsServer.close();
+    clientSocket.close();
+    httpServer.close();
+  });
+
+  test('should handle drone subscription', (done) => {
+    const droneId = 'test-drone-123';
+    
+    clientSocket.emit('drone:subscribe', droneId);
+    
+    clientSocket.on('drone:state_update', (data) => {
+      expect(data.droneId).toBe(droneId);
+      done();
+    });
+  });
+
+  test('should broadcast telemetry updates', (done) => {
+    const telemetryData = {
+      droneId: 'test-drone-123',
+      batteryLevel: 75,
+      altitude: 50,
+      latitude: 50.4501,
+      longitude: 30.5234
+    };
+
+    clientSocket.emit('drone:subscribe', telemetryData.droneId);
+    clientSocket.emit('drone:telemetry', telemetryData);
+
+    clientSocket.on('drone:telemetry_update', (data) => {
+      expect(data.telemetry.batteryLevel).toBe(75);
+      done();
+    });
+  });
+});
+```
+
+7.2. Performance Testing:
+```javascript
+// tests/performance.test.js
+import { performance } from 'perf_hooks';
+import WebSocketServer from '../src/websocket/socketServer.js';
+
+describe('Performance Tests', () => {
+  test('should handle high frequency telemetry updates', async () => {
+    const startTime = performance.now();
+    const telemetryCount = 1000;
+    
+    for (let i = 0; i < telemetryCount; i++) {
+      await wsServer.processTelemetry({
+        droneId: 'test-drone',
+        batteryLevel: 50 + Math.random() * 50,
+        altitude: 10 + Math.random() * 100,
+        timestamp: new Date()
+      }, 'test-user');
+    }
+    
+    const endTime = performance.now();
+    const duration = endTime - startTime;
+    
+    // Should process 1000 telemetry updates in under 5 seconds
+    expect(duration).toBeLessThan(5000);
+  });
+
+  test('should maintain performance with multiple concurrent connections', async () => {
+    // Test with 100 concurrent connections
+    const connections = [];
+    const startTime = performance.now();
+    
+    for (let i = 0; i < 100; i++) {
+      const client = Client('http://localhost:3000/api/ws');
+      connections.push(client);
+      
+      client.emit('fleet:subscribe');
+    }
+    
+    // Send telemetry from 50 drones
+    for (let i = 0; i < 50; i++) {
+      wsServer.processTelemetry({
+        droneId: `drone-${i}`,
+        batteryLevel: 75,
+        altitude: 50
+      }, 'test-user');
+    }
+    
+    const endTime = performance.now();
+    expect(endTime - startTime).toBeLessThan(2000);
+    
+    connections.forEach(client => client.close());
+  });
+});
+```
+
+ТЕХНОЛОГИЧЕСКИЙ СТЕК
+===================
+
+Backend:
+- Node.js + Express.js
+- Socket.IO для WebSocket коммуникации
+- Redis для кэширования и pub/sub
+- MongoDB с геопространственными индексами
+- Mongoose для ODM
+
+Frontend:
+- React.js или Vue.js
+- Socket.IO Client
+- Leaflet для карт
+- Chart.js для графиков
+- Material-UI или Ant Design
+
+DevOps:
+- Docker для контейнеризации
+- Redis Cluster для масштабирования
+- Nginx для load balancing WebSocket
+- PM2 для process management
+
+ДОПОЛНИТЕЛЬНЫЕ ВОЗМОЖНОСТИ
+=========================
+
+1. **Video Streaming**: WebRTC интеграция для live видео с дронов
+2. **Geofencing**: Виртуальные границы с автоматическими реакциями
+3. **Fleet Coordination**: Автоматическая координация между дронами
+4. **Weather Integration**: Интеграция с погодными API
+5. **Voice Commands**: Голосовое управление дронами
+6. **AR/VR Interface**: Дополненная реальность для пилотов
+
+МЕТРИКИ УСПЕХА
+==============
+
+1. **Latency**: WebSocket сообщения < 100ms
+2. **Throughput**: 10,000+ телеметрических сообщений/секунду
+3. **Uptime**: 99.9% доступность tracking сервиса
+4. **Scalability**: Поддержка 1000+ одновременных дронов
+5. **Alert Response**: Критические алерты доставляются за < 5 секунд
+
+ОЦЕНКА ВРЕМЕНИ: 12-16 дней разработки
+СЛОЖНОСТЬ: Высокая (real-time системы, WebSocket, геопространственные данные)
+ПРИОРИТЕТ: Высокий (критичная функция для мониторинга флота)
+
+ЗАВИСИМОСТИ
+===========
+
+- Требует базовой системы управления дронами (из текущего API)
+- Может интегрироваться с Mission Planning системой
+- Подготавливает данные для Analytics модуля
+
+РИСКИ И МИТИГАЦИЯ
+=================
+
+1. **WebSocket Performance**: Использовать Redis Adapter, connection pooling
+2. **Data Volume**: Партиционирование MongoDB, TTL для старых данных
+3. **Network Issues**: Automatic reconnection, offline mode
+4. **Scaling**: Horizontal scaling with Redis Cluster
+5. **Security**: JWT authentication, rate limiting, input validation

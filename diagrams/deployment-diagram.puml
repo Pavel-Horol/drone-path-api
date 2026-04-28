@@ -1,61 +1,87 @@
-@startuml Deployment Diagram
-node "Docker Host" as Docker {
-    rectangle "Node.js App Container" as App {
-        artifact "drone-path-api" as API
-    }
+@startuml
+left to right direction
 
-    rectangle "MongoDB Container" as MongoDB {
-        database "MongoDB" as DB
-    }
-
-    rectangle "MinIO Container" as MinIO {
-        storage "MinIO S3 Storage" as Storage
-    }
-
-    rectangle "Prometheus Container" as Prometheus {
-        artifact "Prometheus" as Metrics
-    }
-
-    rectangle "Grafana Container" as Grafana {
-        artifact "Grafana" as Dashboard
-    }
+node "Client" as ClientNode {
+  node "Browser" as Browser {
+    artifact "Nuxt 3 SPA" as NuxtApp
+  }
 }
 
-node "External Services" as External {
-    cloud "Client Applications" as Client
+node "Docker Compose Environment" as DockerHost {
+
+  node "app\n(Node.js Express)" as AppContainer {
+    artifact "drone-path-api" as API
+    note right
+      Port: 3001:3000
+      /health, /metrics
+      NODE_ENV: development
+    end note
+  }
+
+  node "mongo\n(MongoDB)" as MongoContainer {
+    database "drone_routes DB" as MongoDB
+    note right
+      Port: 27017:27017
+      Stores: Users, Drones, Routes
+    end note
+  }
+
+  node "mongo-express\n(DB Admin UI)" as MongoExpressContainer {
+    artifact "Mongo Express" as MongoExpress
+    note right
+      Port: 8081:8081
+      Admin UI for MongoDB
+    end note
+  }
+
+  node "minio\n(S3 Storage)" as MinioContainer {
+    storage "drone-photos bucket" as MinioStorage
+    note right
+      API Port: 9000:9000
+      Console Port: 9001:9001
+      Stores route point photos
+    end note
+  }
+
+  node "cadvisor\n(Container Metrics)" as CadvisorContainer {
+    artifact "cAdvisor" as CAdvisor
+    note right
+      Port: 8080:8080
+      Collects Docker metrics
+    end note
+  }
+
+  node "prometheus\n(Metrics Storage)" as PrometheusContainer {
+    artifact "Prometheus" as Prometheus
+    note right
+      Port: 9090:9090
+      Scrapes app + cAdvisor
+    end note
+  }
+
+  node "grafana\n(Dashboards)" as GrafanaContainer {
+    artifact "Grafana" as Grafana
+    note right
+      Port: 3002:3000
+      Admin: admin/admin
+    end note
+  }
+
 }
 
-Client --> API : HTTP/HTTPS
-API --> DB : MongoDB queries
-API --> Storage : S3 operations
-API --> Metrics : Push metrics
-Dashboard --> Metrics : Pull metrics
+' Client to backend
+NuxtApp --> API : HTTP :3001
 
-note right of App
-    Express.js server
-    Port: configurable
-    Health check: /health
-    Metrics: /metrics
-end note
+' App dependencies
+API --> MongoDB : MongoDB queries\n:27017
+API --> MinioStorage : S3 operations\n:9000
 
-note right of MongoDB
-    Stores: Users, Drones, Routes
-    Authentication: enabled
-end note
+' Mongo Express to MongoDB
+MongoExpress --> MongoDB : :27017
 
-note right of MinIO
-    Bucket: drone-photos
-    Stores route point photos
-    Public access for downloads
-end note
+' Observability
+API --> Prometheus : exposes /metrics
+CAdvisor --> Prometheus : container metrics\n:8080
+Prometheus --> Grafana : data source\n:9090
 
-note right of Prometheus
-    Scrapes metrics from API
-    Stores time-series data
-end note
-
-note right of Grafana
-    Visualizes metrics
-    Custom dashboards
-end note
 @enduml

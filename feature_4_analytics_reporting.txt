@@ -1,0 +1,1111 @@
+============================================================================
+ФИЧА 4: COMPREHENSIVE ANALYTICS & REPORTING MODULE
+============================================================================
+
+ОПИСАНИЕ ФУНКЦИИ
+================
+
+Комплексная система аналитики и отчетности для анализа эффективности полетов, предиктивного обслуживания, отслеживания производительности дронов, анализа затрат и генерации детальных отчетов для операторов, менеджеров и регулирующих органов.
+
+ОСНОВНЫЕ КОМПОНЕНТЫ
+==================
+
+1. Flight Data Analytics Engine
+2. Predictive Maintenance System  
+3. Performance & KPI Dashboard
+4. Cost Tracking & ROI Analysis
+5. Advanced Reporting Engine
+6. Compliance & Regulatory Reports
+7. Data Visualization & Interactive Charts
+8. Automated Insights & Recommendations
+
+ТЕХНИЧЕСКИЕ ТРЕБОВАНИЯ
+======================
+
+Backend:
+- Time-series database (InfluxDB/TimescaleDB)
+- Data processing pipeline (Apache Kafka + Apache Spark)
+- ML модели для предиктивной аналитики
+- Report generation engine
+- ETL процессы для агрегации данных
+
+Analytics Stack:
+- Python для data science (pandas, numpy, scikit-learn)
+- Apache Superset или Grafana для dashboard
+- Chart.js/D3.js для custom визуализаций
+- PDF/Excel generation libraries
+
+ДЕТАЛЬНЫЙ ПЛАН РЕАЛИЗАЦИИ
+=========================
+
+ЭТАП 1: Архитектура данных и модели (3-4 дня)
+--------------------------------------------
+
+1.1. Time-series модели для метрик:
+```javascript
+// src/models/flightMetrics.model.js
+const flightMetricsSchema = new Schema({
+  droneId: { type: ObjectId, ref: 'Drone', required: true },
+  routeId: { type: ObjectId, ref: 'Route' },
+  missionId: { type: ObjectId, ref: 'Mission' },
+  timestamp: { type: Date, default: Date.now },
+  
+  // Основные метрики полета
+  flightData: {
+    altitude: Number,
+    speed: Number,
+    heading: Number,
+    latitude: Number,
+    longitude: Number,
+    batteryLevel: Number,
+    batteryVoltage: Number,
+    motorRPM: [Number], // массив для каждого мотора
+    temperature: Number,
+    humidity: Number,
+    windSpeed: Number,
+    windDirection: Number
+  },
+  
+  // Производительность
+  performance: {
+    energyConsumption: Number,   // Вт⋅ч
+    distanceTraveled: Number,    // метры
+    flightTime: Number,          // секунды
+    averageSpeed: Number,        // м/с
+    maxAltitude: Number,         // метры
+    verticalDistance: Number     // метры
+  },
+  
+  // Состояние систем
+  systemStatus: {
+    gpsAccuracy: Number,
+    signalStrength: Number,
+    vibrationLevel: Number,
+    gimbalStatus: String,
+    cameraStatus: String,
+    payloadStatus: String
+  },
+  
+  // События и алерты
+  events: [{
+    type: {
+      type: String,
+      enum: ['takeoff', 'land', 'emergency', 'low_battery', 'gps_lost', 'obstacle_detected']
+    },
+    timestamp: Date,
+    data: Schema.Types.Mixed
+  }],
+  
+  // Агрегированные данные (для быстрых запросов)
+  aggregated: {
+    hourly: Schema.Types.Mixed,
+    daily: Schema.Types.Mixed,
+    weekly: Schema.Types.Mixed
+  }
+}, { 
+  timeseries: {
+    timeField: 'timestamp',
+    metaField: 'droneId',
+    granularity: 'seconds'
+  }
+});
+
+// Индексы для производительности
+flightMetricsSchema.index({ droneId: 1, timestamp: -1 });
+flightMetricsSchema.index({ timestamp: 1 });
+flightMetricsSchema.index({ droneId: 1, routeId: 1 });
+```
+
+1.2. Аналитические модели:
+```javascript
+// src/models/analytics.model.js
+
+// Модель для аггрегированной статистики дронов
+const droneAnalyticsSchema = new Schema({
+  droneId: { type: ObjectId, ref: 'Drone', required: true },
+  period: {
+    type: String,
+    enum: ['daily', 'weekly', 'monthly', 'yearly'],
+    required: true
+  },
+  date: { type: Date, required: true },
+  
+  flightStatistics: {
+    totalFlights: Number,
+    totalFlightTime: Number,        // минуты
+    totalDistance: Number,          // км
+    totalEnergyConsumed: Number,    // кВт⋅ч
+    averageFlightDuration: Number,  // минуты
+    averageSpeed: Number,           // км/ч
+    maxAltitude: Number,           // м
+    averageBatteryUsage: Number    // %
+  },
+  
+  performanceMetrics: {
+    efficiency: Number,             // км/кВт⋅ч
+    reliability: Number,            // % успешных полетов
+    utilization: Number,           // % времени в воздухе
+    maintenanceScore: Number,      // 0-100
+    safetyScore: Number,           // 0-100
+    costPerFlight: Number,         // $
+    costPerKm: Number             // $/км
+  },
+  
+  maintenanceData: {
+    totalMotorHours: Number,
+    batteryCharges: Number,
+    lastMaintenanceDate: Date,
+    nextMaintenanceDate: Date,
+    maintenanceAlerts: [{
+      component: String,
+      severity: String,
+      predictedFailureDate: Date,
+      recommendation: String
+    }]
+  },
+  
+  anomalies: [{
+    type: String,
+    severity: String,
+    timestamp: Date,
+    description: String,
+    resolved: Boolean
+  }]
+});
+
+// Модель для отчетов
+const reportSchema = new Schema({
+  name: String,
+  type: {
+    type: String,
+    enum: ['performance', 'maintenance', 'cost', 'compliance', 'safety', 'custom']
+  },
+  period: {
+    startDate: Date,
+    endDate: Date
+  },
+  filters: {
+    droneIds: [ObjectId],
+    routes: [ObjectId],
+    missions: [ObjectId],
+    operators: [ObjectId]
+  },
+  
+  // Настройки отчета
+  configuration: {
+    includeCharts: Boolean,
+    includeRawData: Boolean,
+    format: {
+      type: String,
+      enum: ['pdf', 'excel', 'csv', 'json']
+    },
+    language: String,
+    template: String
+  },
+  
+  // Результаты
+  data: Schema.Types.Mixed,
+  generatedAt: Date,
+  fileUrl: String,
+  status: {
+    type: String,
+    enum: ['generating', 'completed', 'failed'],
+    default: 'generating'
+  },
+  
+  createdBy: { type: ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now }
+});
+```
+
+ЭТАП 2: Data Processing Pipeline (4-5 дней)
+------------------------------------------
+
+2.1. ETL Pipeline для обработки данных:
+```javascript
+// src/services/dataProcessing/etlPipeline.js
+class ETLPipeline {
+  constructor() {
+    this.extractors = new Map();
+    this.transformers = new Map();
+    this.loaders = new Map();
+    this.scheduler = new PipelineScheduler();
+  }
+  
+  // Извлечение данных из различных источников
+  async extract(source, timeRange) {
+    switch (source.type) {
+      case 'flight_logs':
+        return await this.extractFlightLogs(source, timeRange);
+      case 'telemetry':
+        return await this.extractTelemetry(source, timeRange);
+      case 'mission_logs':
+        return await this.extractMissionLogs(source, timeRange);
+      case 'maintenance_logs':
+        return await this.extractMaintenanceLogs(source, timeRange);
+      default:
+        throw new Error(`Unknown source type: ${source.type}`);
+    }
+  }
+  
+  // Трансформация и очистка данных
+  async transform(rawData, transformationRules) {
+    const cleanedData = await this.cleanData(rawData);
+    const enrichedData = await this.enrichData(cleanedData);
+    const aggregatedData = await this.aggregateData(enrichedData, transformationRules);
+    
+    return {
+      raw: rawData,
+      cleaned: cleanedData,
+      enriched: enrichedData,
+      aggregated: aggregatedData
+    };
+  }
+  
+  // Загрузка обработанных данных
+  async load(processedData, destination) {
+    switch (destination.type) {
+      case 'analytics_db':
+        return await this.loadToAnalyticsDB(processedData);
+      case 'time_series_db':
+        return await this.loadToTimeSeriesDB(processedData);
+      case 'cache':
+        return await this.loadToCache(processedData);
+      default:
+        throw new Error(`Unknown destination: ${destination.type}`);
+    }
+  }
+  
+  async cleanData(rawData) {
+    return rawData
+      .filter(record => this.validateRecord(record))
+      .map(record => this.normalizeRecord(record))
+      .filter(record => !this.isOutlier(record));
+  }
+  
+  async enrichData(cleanedData) {
+    return Promise.all(cleanedData.map(async (record) => {
+      // Добавляем weather data
+      const weather = await this.getWeatherData(
+        record.location, 
+        record.timestamp
+      );
+      
+      // Добавляем drone specifications
+      const droneSpecs = await this.getDroneSpecs(record.droneId);
+      
+      // Расчет derived metrics
+      const derivedMetrics = this.calculateDerivedMetrics(record, droneSpecs);
+      
+      return {
+        ...record,
+        weather,
+        droneSpecs,
+        derivedMetrics
+      };
+    }));
+  }
+  
+  async aggregateData(enrichedData, rules) {
+    const grouped = this.groupBy(enrichedData, rules.groupBy);
+    
+    const aggregated = {};
+    
+    for (const [key, group] of Object.entries(grouped)) {
+      aggregated[key] = {
+        count: group.length,
+        metrics: this.calculateAggregateMetrics(group, rules.metrics),
+        timeSeries: this.generateTimeSeries(group, rules.timeInterval)
+      };
+    }
+    
+    return aggregated;
+  }
+}
+```
+
+2.2. Real-time Analytics Engine:
+```javascript
+// src/services/analytics/realTimeAnalytics.js
+class RealTimeAnalyticsEngine {
+  constructor() {
+    this.eventStream = new EventStream();
+    this.metricCalculators = new Map();
+    this.alertThresholds = new Map();
+    this.activeStreams = new Map();
+  }
+  
+  async startAnalytics(droneId) {
+    const stream = this.eventStream.subscribe(`drone:${droneId}`);
+    
+    stream.on('telemetry', (data) => {
+      this.processTelemetryData(droneId, data);
+    });
+    
+    stream.on('flight_event', (event) => {
+      this.processFlightEvent(droneId, event);
+    });
+    
+    this.activeStreams.set(droneId, stream);
+  }
+  
+  async processTelemetryData(droneId, telemetry) {
+    // Обновляем real-time метрики
+    await this.updateRealTimeMetrics(droneId, telemetry);
+    
+    // Проверяем аномалии
+    const anomalies = await this.detectAnomalies(droneId, telemetry);
+    if (anomalies.length > 0) {
+      await this.handleAnomalies(droneId, anomalies);
+    }
+    
+    // Обновляем predictive models
+    await this.updatePredictiveModels(droneId, telemetry);
+  }
+  
+  async updateRealTimeMetrics(droneId, telemetry) {
+    const metrics = {
+      efficiency: this.calculateEfficiency(telemetry),
+      batteryDrain: this.calculateBatteryDrain(telemetry),
+      performanceScore: this.calculatePerformanceScore(telemetry),
+      riskScore: this.calculateRiskScore(telemetry)
+    };
+    
+    // Сохраняем в cache для быстрого доступа
+    await this.cacheManager.set(`metrics:${droneId}`, metrics, 300); // 5 min TTL
+    
+    // Отправляем real-time обновления
+    this.websocketService.emit(`analytics:${droneId}`, metrics);
+  }
+}
+```
+
+ЭТАП 3: Predictive Maintenance System (3-4 дня)
+----------------------------------------------
+
+3.1. ML Models для предиктивного обслуживания:
+```python
+# analytics-service/models/predictive_maintenance.py
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor, IsolationForest
+from sklearn.preprocessing import StandardScaler
+import joblib
+
+class PredictiveMaintenanceEngine:
+    def __init__(self):
+        self.models = {}
+        self.scalers = {}
+        self.load_models()
+        
+    def predict_battery_life(self, drone_id, current_metrics):
+        """Предсказание оставшегося срока службы батареи"""
+        
+        features = self.extract_battery_features(current_metrics)
+        scaled_features = self.scalers['features'].transform([features])
+        
+        # Предсказание в циклах зарядки
+        remaining_cycles = self.models['battery_life'].predict(scaled_features)[0]
+        
+        # Конвертируем в дни (предполагая 1 цикл в день)
+        remaining_days = max(0, remaining_cycles)
+        
+        return {
+            'remaining_cycles': int(remaining_cycles),
+            'remaining_days': int(remaining_days),
+            'health_score': min(100, max(0, remaining_cycles / 500 * 100)),
+            'recommendation': self.get_battery_recommendation(remaining_cycles)
+        }
+    
+    def predict_motor_health(self, drone_id, telemetry_history):
+        """Анализ состояния моторов"""
+        
+        motor_features = []
+        for motor_data in telemetry_history:
+            features = self.extract_motor_features(motor_data)
+            motor_features.append(features)
+        
+        motor_features = np.array(motor_features)
+        
+        # Детекция аномалий в работе моторов
+        anomaly_scores = self.models['motor_health'].decision_function(motor_features)
+        
+        # Расчет health score для каждого мотора
+        health_scores = []
+        for i in range(4):  # Предполагаем 4 мотора
+            health_score = np.mean(anomaly_scores)
+            health_scores.append(max(0, min(100, (health_score + 1) * 50)))
+        
+        return {
+            'motor_health_scores': health_scores,
+            'overall_health': np.mean(health_scores),
+            'maintenance_needed': any(score < 70 for score in health_scores),
+            'recommendations': self.get_motor_recommendations(health_scores)
+        }
+    
+    def generate_maintenance_schedule(self, drone_id, predictions):
+        """Генерация расписания обслуживания"""
+        
+        maintenance_tasks = []
+        
+        # Батарея
+        battery_pred = predictions.get('battery_life', {})
+        if battery_pred.get('remaining_days', 365) < 30:
+            maintenance_tasks.append({
+                'component': 'battery',
+                'priority': 'high',
+                'estimated_date': self.add_days(datetime.now(), battery_pred.get('remaining_days', 30)),
+                'task': 'Battery replacement',
+                'estimated_cost': 150,
+                'estimated_downtime': 30  # minutes
+            })
+        
+        return maintenance_tasks
+```
+
+3.2. Интеграция с основным API:
+```javascript
+// src/services/predictiveMaintenanceService.js
+class PredictiveMaintenanceService {
+  constructor() {
+    this.pythonAPI = axios.create({
+      baseURL: process.env.ANALYTICS_SERVICE_URL,
+      timeout: 30000
+    });
+  }
+  
+  async analyzeDroneHealth(droneId) {
+    try {
+      const response = await this.pythonAPI.post('/analyze_drone_health', {
+        drone_id: droneId
+      });
+      
+      // Сохраняем результаты в MongoDB
+      const analysis = new MaintenanceAnalysis({
+        droneId,
+        analysisDate: new Date(),
+        predictions: response.data.predictions,
+        maintenanceSchedule: response.data.maintenance_schedule,
+        overallHealthScore: response.data.overall_health_score
+      });
+      
+      await analysis.save();
+      
+      // Создаем алерты если необходимо
+      await this.createMaintenanceAlerts(droneId, response.data);
+      
+      return response.data;
+      
+    } catch (error) {
+      console.error(`Predictive maintenance analysis failed for drone ${droneId}:`, error);
+      throw error;
+    }
+  }
+}
+```
+
+ЭТАП 4: Performance Dashboard (3-4 дня)
+--------------------------------------
+
+4.1. KPI Dashboard компоненты:
+```
+frontend/src/components/Analytics/
+├── AnalyticsDashboard.jsx         # Основной дашборд
+├── Charts/
+│   ├── FlightEfficiencyChart.jsx  # График эффективности полетов
+│   ├── BatteryHealthChart.jsx     # График состояния батареи
+│   ├── CostAnalysisChart.jsx      # Анализ затрат
+│   ├── UtilizationChart.jsx       # График использования
+│   └── PerformanceTrends.jsx      # Тренды производительности
+├── Widgets/
+│   ├── KPIWidget.jsx              # Виджет KPI
+│   ├── AlertsWidget.jsx           # Виджет алертов
+│   ├── MaintenanceWidget.jsx      # Виджет обслуживания
+│   └── FleetOverviewWidget.jsx    # Обзор флота
+├── Reports/
+│   ├── ReportBuilder.jsx          # Конструктор отчетов
+│   ├── ReportPreview.jsx          # Превью отчета
+│   ├── ReportScheduler.jsx        # Планировщик отчетов
+│   └── ReportHistory.jsx          # История отчетов
+└── Filters/
+    ├── DateRangeFilter.jsx        # Фильтр периода
+    ├── DroneFilter.jsx           # Фильтр дронов
+    └── MetricsFilter.jsx         # Фильтр метрик
+```
+
+4.2. KPI Dashboard:
+```javascript
+// AnalyticsDashboard.jsx
+const AnalyticsDashboard = () => {
+  const [timeRange, setTimeRange] = useState('7d');
+  const [selectedDrones, setSelectedDrones] = useState([]);
+  const [kpis, setKpis] = useState({});
+  
+  const { data: analyticsData } = useQuery(
+    ['analytics', timeRange, selectedDrones],
+    () => analyticsService.getAnalytics(timeRange, selectedDrones),
+    { refetchInterval: 300000 } // 5 min
+  );
+  
+  const mainKPIs = [
+    { 
+      title: 'Fleet Utilization', 
+      value: kpis.fleetUtilization, 
+      unit: '%',
+      trend: kpis.utilizationTrend,
+      target: 75
+    },
+    { 
+      title: 'Average Flight Time', 
+      value: kpis.avgFlightTime, 
+      unit: 'min',
+      trend: kpis.flightTimeTrend,
+      target: 45
+    },
+    { 
+      title: 'Energy Efficiency', 
+      value: kpis.energyEfficiency, 
+      unit: 'km/kWh',
+      trend: kpis.efficiencyTrend,
+      target: 15
+    },
+    { 
+      title: 'Success Rate', 
+      value: kpis.successRate, 
+      unit: '%',
+      trend: kpis.successRateTrend,
+      target: 95
+    }
+  ];
+  
+  return (
+    <div className="analytics-dashboard">
+      <div className="dashboard-grid">
+        {/* KPI Row */}
+        <div className="kpi-row">
+          {mainKPIs.map((kpi, index) => (
+            <KPIWidget 
+              key={index}
+              title={kpi.title}
+              value={kpi.value}
+              unit={kpi.unit}
+              trend={kpi.trend}
+              target={kpi.target}
+            />
+          ))}
+        </div>
+        
+        {/* Charts */}
+        <FlightEfficiencyChart data={analyticsData?.flightEfficiency} />
+        <BatteryHealthChart data={analyticsData?.batteryHealth} />
+        <CostAnalysisChart data={analyticsData?.costAnalysis} />
+        
+        {/* Maintenance Section */}
+        <MaintenanceWidget data={analyticsData?.maintenance} />
+        <AlertsWidget alerts={analyticsData?.alerts} />
+      </div>
+    </div>
+  );
+};
+```
+
+ЭТАП 5: Report Generation Engine (3-4 дня)
+-----------------------------------------
+
+5.1. Report Builder Service:
+```javascript
+// src/services/reportBuilder.js
+class ReportBuilder {
+  constructor() {
+    this.templates = new Map();
+    this.generators = new Map();
+  }
+  
+  async generateReport(reportConfig) {
+    const { type, period, filters, format, template } = reportConfig;
+    
+    // Сбор данных
+    const data = await this.collectData(type, period, filters);
+    
+    // Генерация контента
+    const content = await this.generateContent(data, template);
+    
+    // Форматирование
+    const formattedReport = await this.formatReport(content, format);
+    
+    // Сохранение
+    const report = new Report({
+      ...reportConfig,
+      data: content,
+      status: 'completed',
+      generatedAt: new Date(),
+      fileUrl: formattedReport.fileUrl
+    });
+    
+    await report.save();
+    return report;
+  }
+  
+  async collectPerformanceData(startDate, endDate, filters) {
+    const pipeline = [
+      {
+        $match: {
+          timestamp: { $gte: startDate, $lte: endDate },
+          ...(filters.droneIds && { droneId: { $in: filters.droneIds } })
+        }
+      },
+      {
+        $group: {
+          _id: {
+            droneId: '$droneId',
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp' } }
+          },
+          totalFlightTime: { $sum: '$performance.flightTime' },
+          totalDistance: { $sum: '$performance.distanceTraveled' },
+          totalEnergyConsumed: { $sum: '$performance.energyConsumption' },
+          avgSpeed: { $avg: '$performance.averageSpeed' },
+          flightCount: { $sum: 1 }
+        }
+      }
+    ];
+    
+    return await FlightMetrics.aggregate(pipeline);
+  }
+  
+  generateSummary(data) {
+    const summary = {
+      totalDrones: data.length,
+      totalFlightTime: data.reduce((sum, d) => sum + d.totalFlightTime, 0),
+      totalDistance: data.reduce((sum, d) => sum + d.totalDistance, 0),
+      totalFlights: data.reduce((sum, d) => sum + d.totalFlights, 0),
+      avgEfficiency: data.reduce((sum, d) => sum + d.efficiency, 0) / data.length
+    };
+    
+    return {
+      ...summary,
+      performanceGrade: this.calculateOverallGrade(summary),
+      topPerformers: data
+        .sort((a, b) => b.performanceScore - a.performanceScore)
+        .slice(0, 3)
+    };
+  }
+}
+```
+
+ЭТАП 6: Cost Tracking & ROI Analysis (2-3 дня)
+---------------------------------------------
+
+6.1. Cost Analysis Engine:
+```javascript
+// src/services/costAnalysis.js
+class CostAnalysisEngine {
+  constructor() {
+    this.costModels = new Map();
+  }
+  
+  async calculateFlightCosts(droneId, flightData) {
+    const drone = await Drone.findById(droneId);
+    const costModel = this.costModels.get(drone.model) || this.getDefaultCostModel();
+    
+    return {
+      operationalCosts: await this.calculateOperationalCosts(flightData, costModel),
+      maintenanceCosts: await this.calculateMaintenanceCosts(droneId, flightData),
+      energyCosts: this.calculateEnergyCosts(flightData, costModel),
+      depreciationCosts: this.calculateDepreciation(drone, flightData),
+      totalCost: 0 // рассчитывается как сумма всех компонентов
+    };
+  }
+  
+  calculateROI(droneId, timeframe) {
+    // Расчет ROI = (Revenue - Costs) / Costs * 100%
+    const revenue = this.calculateRevenue(droneId, timeframe);
+    const costs = this.calculateTotalCosts(droneId, timeframe);
+    
+    return {
+      revenue,
+      costs,
+      profit: revenue - costs,
+      roiPercentage: ((revenue - costs) / costs) * 100,
+      paybackPeriod: this.calculatePaybackPeriod(droneId),
+      breakEvenPoint: this.calculateBreakEvenPoint(droneId)
+    };
+  }
+  
+  generateCostOptimizationRecommendations(costAnalysis) {
+    const recommendations = [];
+    
+    if (costAnalysis.energyCosts > costAnalysis.totalCost * 0.4) {
+      recommendations.push({
+        category: 'energy',
+        priority: 'high',
+        title: 'Optimize energy efficiency',
+        description: 'Energy costs are above 40% of total costs',
+        potentialSavings: costAnalysis.energyCosts * 0.2,
+        actions: [
+          'Review flight patterns for efficiency',
+          'Consider battery upgrade',
+          'Optimize altitude and speed settings'
+        ]
+      });
+    }
+    
+    return recommendations;
+  }
+}
+```
+
+ЭТАП 7: Compliance & Regulatory Reports (2 дня)
+----------------------------------------------
+
+7.1. Compliance Module:
+```javascript
+// src/services/complianceService.js
+class ComplianceService {
+  constructor() {
+    this.regulations = new Map();
+    this.loadRegulations();
+  }
+  
+  async generateComplianceReport(timeframe, regulations = ['FAA', 'EASA']) {
+    const report = {
+      period: timeframe,
+      regulations,
+      compliance: {},
+      violations: [],
+      recommendations: []
+    };
+    
+    for (const regulation of regulations) {
+      const complianceData = await this.checkCompliance(regulation, timeframe);
+      report.compliance[regulation] = complianceData;
+    }
+    
+    return report;
+  }
+  
+  async checkCompliance(regulation, timeframe) {
+    const rules = this.regulations.get(regulation);
+    const violations = [];
+    const complianceScore = 0;
+    
+    for (const rule of rules) {
+      const ruleCompliance = await this.checkRule(rule, timeframe);
+      if (!ruleCompliance.passed) {
+        violations.push(ruleCompliance.violation);
+      }
+    }
+    
+    return {
+      regulation,
+      score: complianceScore,
+      violations,
+      status: violations.length === 0 ? 'compliant' : 'non-compliant'
+    };
+  }
+  
+  async generateAuditTrail(droneId, timeframe) {
+    return {
+      droneId,
+      timeframe,
+      flights: await this.getFlightLogs(droneId, timeframe),
+      maintenance: await this.getMaintenanceLogs(droneId, timeframe),
+      incidents: await this.getIncidentLogs(droneId, timeframe),
+      certifications: await this.getCertifications(droneId),
+      operatorLogs: await this.getOperatorLogs(droneId, timeframe)
+    };
+  }
+}
+```
+
+ЭТАП 8: API Endpoints (1-2 дня)
+------------------------------
+
+8.1. Analytics API:
+```javascript
+// src/controllers/analytics.controller.js
+export const analyticsController = {
+  async getAnalytics(req, res) {
+    const { timeRange, droneIds, metrics } = req.query;
+    
+    const analyticsData = await analyticsService.getAnalytics({
+      timeRange,
+      droneIds: droneIds ? droneIds.split(',') : null,
+      metrics: metrics ? metrics.split(',') : null,
+      userId: req.user._id
+    });
+    
+    res.json(analyticsData);
+  },
+  
+  async generateReport(req, res) {
+    const reportConfig = req.body;
+    reportConfig.createdBy = req.user._id;
+    
+    const report = await reportBuilder.generateReport(reportConfig);
+    res.status(201).json(report);
+  },
+  
+  async getDroneHealthAnalysis(req, res) {
+    const droneId = req.params.droneId;
+    const healthData = await predictiveMaintenanceService.analyzeDroneHealth(droneId);
+    
+    res.json(healthData);
+  },
+  
+  async getCostAnalysis(req, res) {
+    const { droneId, timeframe } = req.params;
+    const costData = await costAnalysisEngine.calculateFlightCosts(droneId, timeframe);
+    
+    res.json(costData);
+  },
+  
+  async getComplianceReport(req, res) {
+    const { timeframe, regulations } = req.query;
+    const complianceData = await complianceService.generateComplianceReport(
+      timeframe, 
+      regulations ? regulations.split(',') : ['FAA']
+    );
+    
+    res.json(complianceData);
+  }
+};
+```
+
+ЭТАП 9: Frontend Integration (4 дня)
+-----------------------------------
+
+9.1. Analytics Hooks:
+```javascript
+// src/hooks/useAnalytics.js
+export const useAnalytics = (timeRange, filters = {}) => {
+  return useQuery(
+    ['analytics', timeRange, filters],
+    () => analyticsService.getAnalytics(timeRange, filters),
+    {
+      refetchInterval: 300000, // 5 min
+      staleTime: 60000, // 1 min
+      cacheTime: 600000 // 10 min
+    }
+  );
+};
+
+export const useReportGeneration = () => {
+  const queryClient = useQueryClient();
+  
+  return useMutation(
+    (reportConfig) => analyticsService.generateReport(reportConfig),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries('reports');
+      }
+    }
+  );
+};
+```
+
+9.2. Report Builder UI:
+```javascript
+// ReportBuilder.jsx
+const ReportBuilder = () => {
+  const [reportConfig, setReportConfig] = useState({
+    type: 'performance',
+    period: { startDate: null, endDate: null },
+    filters: {},
+    format: 'pdf',
+    template: 'standard'
+  });
+  
+  const { mutate: generateReport, isLoading } = useReportGeneration();
+  
+  const handleGenerate = () => {
+    generateReport(reportConfig);
+  };
+  
+  return (
+    <div className="report-builder">
+      <h2>Report Builder</h2>
+      
+      <div className="report-config">
+        <ReportTypeSelector 
+          value={reportConfig.type}
+          onChange={(type) => setReportConfig({...reportConfig, type})}
+        />
+        
+        <DateRangeSelector
+          startDate={reportConfig.period.startDate}
+          endDate={reportConfig.period.endDate}
+          onChange={(period) => setReportConfig({...reportConfig, period})}
+        />
+        
+        <FiltersPanel
+          filters={reportConfig.filters}
+          onChange={(filters) => setReportConfig({...reportConfig, filters})}
+        />
+        
+        <FormatSelector
+          value={reportConfig.format}
+          onChange={(format) => setReportConfig({...reportConfig, format})}
+        />
+      </div>
+      
+      <button 
+        onClick={handleGenerate}
+        disabled={isLoading}
+        className="generate-btn"
+      >
+        {isLoading ? 'Generating...' : 'Generate Report'}
+      </button>
+      
+      <ReportPreview config={reportConfig} />
+    </div>
+  );
+};
+```
+
+ЭТАП 10: Testing & Performance (2 дня)
+------------------------------------
+
+10.1. Analytics Tests:
+```javascript
+// tests/analytics.test.js
+describe('Analytics System', () => {
+  describe('Data Processing', () => {
+    it('should process flight data correctly', async () => {
+      const rawData = await generateTestFlightData();
+      const processed = await etlPipeline.transform(rawData);
+      
+      expect(processed.cleaned.length).toBeLessThanOrEqual(rawData.length);
+      expect(processed.aggregated).toHaveProperty('metrics');
+    });
+  });
+  
+  describe('Report Generation', () => {
+    it('should generate performance report', async () => {
+      const config = {
+        type: 'performance',
+        period: { startDate: '2024-01-01', endDate: '2024-01-31' },
+        format: 'json'
+      };
+      
+      const report = await reportBuilder.generateReport(config);
+      
+      expect(report.status).toBe('completed');
+      expect(report.data).toHaveProperty('summary');
+    });
+  });
+  
+  describe('Predictive Maintenance', () => {
+    it('should predict battery life accurately', async () => {
+      const droneId = 'test-drone-id';
+      const prediction = await predictiveMaintenanceService.analyzeDroneHealth(droneId);
+      
+      expect(prediction).toHaveProperty('predictions');
+      expect(prediction.predictions.battery_life).toHaveProperty('remaining_days');
+    });
+  });
+});
+```
+
+ТЕХНОЛОГИЧЕСКИЙ СТЕК
+===================
+
+Backend Analytics:
+- Node.js + Express для основного API
+- Python + FastAPI для ML сервисов  
+- MongoDB для транзакционных данных
+- InfluxDB/TimescaleDB для time-series данных
+- Redis для кэширования и real-time data
+
+Machine Learning:
+- Python: pandas, numpy, scikit-learn
+- TensorFlow/PyTorch для deep learning
+- Apache Spark для big data processing
+- Apache Kafka для real-time data streaming
+
+Frontend:
+- React.js с TypeScript
+- Chart.js/D3.js для визуализаций
+- Material-UI/Ant Design для UI
+- React Query для data management
+
+Report Generation:
+- PDFKit/Puppeteer для PDF
+- ExcelJS для Excel файлов
+- Chart.js для embedded графиков
+
+ДОПОЛНИТЕЛЬНЫЕ ВОЗМОЖНОСТИ
+=========================
+
+1. **Advanced ML Features**: 
+   - Anomaly detection с LSTM сетями
+   - Clustering для fleet optimization
+   - Reinforcement learning для autonomous insights
+
+2. **Big Data Integration**:
+   - Apache Hadoop для масштабирования
+   - Elasticsearch для fast text search
+   - Apache Airflow для workflow orchestration
+
+3. **AI-Powered Insights**:
+   - NLP для анализа maintenance logs
+   - Computer vision для automated inspection reports
+   - Predictive analytics для demand forecasting
+
+4. **Enterprise Features**:
+   - Multi-tenant архитектура
+   - Role-based report access
+   - API для integration с ERP системами
+   - Automated compliance monitoring
+
+5. **Mobile Analytics**:
+   - Mobile-optimized dashboard
+   - Push notifications для alerts
+   - Offline report viewing
+
+МЕТРИКИ УСПЕХА
+==============
+
+1. **Data Processing Performance**:
+   - ETL pipeline: процесс 1M записей за < 10 минут
+   - Real-time analytics: latency < 100ms
+   - Report generation: < 30 секунд для стандартных отчетов
+
+2. **Accuracy & Reliability**:
+   - Predictive maintenance: 85%+ точность предсказаний
+   - Anomaly detection: < 5% false positives  
+   - Data quality: 99%+ записей проходят валидацию
+
+3. **User Experience**:
+   - Dashboard load time: < 3 секунды
+   - Interactive charts: < 500ms response time
+   - Mobile responsiveness: 100% функций доступны
+
+4. **Business Value**:
+   - 20-30% снижение maintenance costs через predictive analytics
+   - 15-25% улучшение fleet utilization
+   - 90%+ compliance rate с регулирующими требованиями
+
+5. **Scalability**:
+   - Поддержка 10,000+ дронов в fleet
+   - 100GB+ данных в месяц  
+   - 1000+ одновременных пользователей dashboard
+
+ОЦЕНКА ВРЕМЕНИ: 24-30 дней разработки
+СЛОЖНОСТЬ: Очень высокая (ML/AI, big data, complex analytics)
+ПРИОРИТЕТ: Высокий (критично для data-driven decision making и operational excellence)
+
+ЗАВИСИМОСТИ
+===========
+
+- Требует реализации Real-time Tracking (Фича 1) для получения телеметрии
+- Интегрируется с Mission Planning (Фича 3) для анализа mission effectiveness  
+- Может использовать данные Route Optimization (Фича 2) для cost analysis
+
+РИСКИ И МИТИГАЦИЯ
+=================
+
+1. **Сложность ML моделей**: Начать с простых алгоритмов, постепенно усложнять
+2. **Big data performance**: Использовать proven technologies (Kafka, Spark)
+3. **Data quality issues**: Implement comprehensive data validation
+4. **User adoption**: Focus on intuitive UI и clear value proposition
+5. **Regulatory compliance**: Work closely с legal team и industry experts
