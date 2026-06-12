@@ -6,12 +6,8 @@ scrape_configs:
   - job_name: 'node_app'
     metrics_path: /metrics
     static_configs:
-      - targets: ['app:3001']
+      - targets: ['api:3001']
 
   - job_name: 'cadvisor'
     static_configs:
       - targets: ['cadvisor:8080']
-
-  - job_name: 'mongodb'
-    static_configs:
-      - targets: ['mongo-exporter:9216']

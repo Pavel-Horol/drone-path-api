@@ -1,0 +1,118 @@
+{
+  "uid": "service-health",
+  "title": "🟢 Service Health (idle-friendly)",
+  "tags": ["drone-path", "demo"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Targets UP",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(up)", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "green", "value": 1 }
+          ] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "value" }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "App uptime",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "time() - app_process_start_time_seconds", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "textMode": "value" }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Resident memory",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "app_process_resident_memory_bytes", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "color": { "mode": "fixed", "fixedColor": "purple" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "textMode": "value" }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Heap used",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "app_nodejs_heap_size_used_bytes", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "color": { "mode": "fixed", "fixedColor": "orange" } }, "overrides": [] },
+      "options": { "colorMode": "value", "graphMode": "area", "textMode": "value" }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "CPU usage (cores)",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "rate(app_process_cpu_seconds_total[1m])", "legendFormat": "cpu cores", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 20, "lineWidth": 2 } }, "overrides": [] }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Memory: resident vs heap",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "app_process_resident_memory_bytes", "legendFormat": "resident", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "refId": "B", "expr": "app_nodejs_heap_size_used_bytes", "legendFormat": "heap used", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "fillOpacity": 15, "lineWidth": 2 } }, "overrides": [] }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Event loop lag (s)",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "app_nodejs_eventloop_lag_seconds", "legendFormat": "lag", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 20, "lineWidth": 2 } }, "overrides": [] }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Active handles & requests",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "app_nodejs_active_handles_total", "legendFormat": "handles", "datasource": { "type": "prometheus", "uid": "prometheus" } },
+        { "refId": "B", "expr": "app_nodejs_active_requests_total", "legendFormat": "requests", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] }
+    }
+  ]
+}

@@ -90,9 +90,9 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./observability/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
-      - ./observability/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./observability/grafna/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./observability/grafna/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./observability/grafna/dashboards:/var/lib/grafana/dashboards
     ports:
       - "3002:3000"
     depends_on:

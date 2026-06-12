@@ -1,0 +1,58 @@
+{
+  "uid": "containers-overview",
+  "title": "📦 Containers (cAdvisor)",
+  "tags": ["drone-path", "demo"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "templating": { "list": [] },
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "CPU usage by container (cores)",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[1m]))", "legendFormat": "{{name}}", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 15, "lineWidth": 2 } }, "overrides": [] }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Memory usage by container",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (name) (container_memory_usage_bytes{name!=\"\"})", "legendFormat": "{{name}}", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "fillOpacity": 15, "lineWidth": 2 } }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Network RX by container",
+      "gridPos": { "x": 0, "y": 9, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (name) (rate(container_network_receive_bytes_total{name!=\"\"}[1m]))", "legendFormat": "{{name}}", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Network TX by container",
+      "gridPos": { "x": 12, "y": 9, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (name) (rate(container_network_transmit_bytes_total{name!=\"\"}[1m]))", "legendFormat": "{{name}}", "datasource": { "type": "prometheus", "uid": "prometheus" } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] }
+    }
+  ]
+}
